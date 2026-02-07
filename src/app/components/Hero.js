@@ -4,12 +4,40 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Target, Zap, ChevronDown, Users, Clock, TrendingUp, AlertCircle, CheckCircle, Brain } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import QuizStepper from './QuizStepper';
+import { getAnalytics, EVENTS } from '@/app/utils/analytics';
 
 export default function Hero() {
-  const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutes en secondes
-  const [spotsLeft, setSpotsLeft] = useState(47);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const [spotsLeft, setSpotsLeft] = useState(null);
   const [thisWeekCount, setThisWeekCount] = useState(2841);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [heroStartTime] = useState(Date.now());
+  const analytics = getAnalytics();
+
+  // Constantes pour la configuration du timer
+  const INITIAL_TIMER = 1 * 3600 + 46 * 60; // 1h46 en secondes
+  const TIMER_REDUCTION = 15 * 60; // 15 minutes en secondes
+  const SPOTS_STORAGE_KEY = 'pineal_spots_left';
+  const TIMER_STORAGE_KEY = 'pineal_timer_data';
+
+  // Track hero view on mount
+  useEffect(() => {
+    analytics.track(EVENTS.HERO_VIEW, {
+      device: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop',
+      source: typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('utm_source') : null
+    });
+
+    // Initialiser les spots depuis localStorage
+    const savedSpots = localStorage.getItem(SPOTS_STORAGE_KEY);
+    if (savedSpots) {
+      setSpotsLeft(parseInt(savedSpots, 10));
+    } else {
+      // Première visite : 47 spots
+      const initialSpots = 47;
+      setSpotsLeft(initialSpots);
+      localStorage.setItem(SPOTS_STORAGE_KEY, initialSpots.toString());
+    }
+  }, []);
 
   const handleScrollToQuiz = () => {
     const quizSection = document.getElementById('quiz-section');
@@ -18,37 +46,140 @@ export default function Hero() {
     }
   };
 
-  // Countdown timer
+  // Countdown timer avec réinitialisation
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    const initializeTimer = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const savedData = localStorage.getItem(TIMER_STORAGE_KEY);
+      
+      let timerData;
+      
+      if (savedData) {
+        try {
+          timerData = JSON.parse(savedData);
+          
+          // Vérifier si le timer actuel est expiré
+          if (now >= timerData.deadline) {
+            // Timer expiré, créer un nouveau avec 15 minutes de moins
+            const newDuration = Math.max(timerData.lastDuration - TIMER_REDUCTION, 15 * 60); // Minimum 15 minutes
+            const newDeadline = now + newDuration;
+            
+            timerData = {
+              deadline: newDeadline,
+              lastDuration: newDuration,
+              cycles: (timerData.cycles || 0) + 1
+            };
+            
+            localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(timerData));
+          }
+        } catch {
+          // Données corrompues, réinitialiser
+          timerData = null;
+        }
+      }
+      
+      if (!timerData) {
+        // Première initialisation
+        const initialDeadline = now + INITIAL_TIMER;
+        timerData = {
+          deadline: initialDeadline,
+          lastDuration: INITIAL_TIMER,
+          cycles: 0
+        };
+        localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(timerData));
+      }
+      
+      return timerData;
+    };
+
+    const timerData = initializeTimer();
+    
+    const calculateTimeLeft = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const remaining = timerData.deadline - now;
+      return remaining > 0 ? remaining : 0;
+    };
+
+    setTimeLeft(calculateTimeLeft());
 
     const timer = setInterval(() => {
-      setTimeLeft((prevTime) => {
-        if (prevTime <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prevTime - 1;
-      });
+      const remaining = calculateTimeLeft();
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        analytics.track(EVENTS.TIMER_EXPIRY);
+        
+        // Redémarrer le timer avec réduction
+        setTimeout(() => {
+          const now = Math.floor(Date.now() / 1000);
+          const savedData = JSON.parse(localStorage.getItem(TIMER_STORAGE_KEY) || '{}');
+          const newDuration = Math.max(savedData.lastDuration - TIMER_REDUCTION, 15 * 60);
+          const newDeadline = now + newDuration;
+          
+          const updatedData = {
+            deadline: newDeadline,
+            lastDuration: newDuration,
+            cycles: (savedData.cycles || 0) + 1
+          };
+          
+          localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(updatedData));
+          setTimeLeft(newDuration);
+        }, 1000);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, []);
 
-  // Format timer
+  // Formatage pour afficher HH:MM:SS
   const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    if (seconds === null) return "01:46:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Diminuer les spots quand quelqu'un clique (simulation)
+  // Diminuer les spots quand quelqu'un clique
   const handleStartWithSpotReduction = () => {
+    const timeOnHero = Date.now() - heroStartTime;
+    analytics.track(EVENTS.HERO_CTA_CLICK, {
+      timeOnHero: timeOnHero,
+      spotsLeft: spotsLeft,
+      timerRemaining: timeLeft
+    });
+    
     if (spotsLeft > 0) {
-      setSpotsLeft(spotsLeft - 1);
+      const newSpots = spotsLeft - 1;
+      setSpotsLeft(newSpots);
+      localStorage.setItem(SPOTS_STORAGE_KEY, newSpots.toString());
     }
     setShowQuiz(true);
   };
+
+  // Récupérer le nombre de cycles de réinitialisation
+  const getTimerCycles = () => {
+    if (typeof window === 'undefined') return 0;
+    const savedData = localStorage.getItem(TIMER_STORAGE_KEY);
+    if (!savedData) return 0;
+    try {
+      const data = JSON.parse(savedData);
+      return data.cycles || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Calculer la durée actuelle du timer
+  const getCurrentTimerDuration = () => {
+    if (timeLeft === null) return INITIAL_TIMER;
+    const cycles = getTimerCycles();
+    const reduction = cycles * TIMER_REDUCTION;
+    return Math.max(INITIAL_TIMER - reduction, 15 * 60);
+  };
+
+  const timerCycles = getTimerCycles();
 
   return (
     <motion.section
@@ -90,8 +221,15 @@ export default function Hero() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
-                className="inline-flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-rose-50 to-rose-100/50 rounded-xl border-2 border-rose-300 shadow-xl mx-auto"
+                className="inline-flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-rose-50 to-rose-100/50 rounded-xl border-2 border-rose-300 shadow-xl mx-auto relative"
               >
+                {/* Indicateur de réduction */}
+                {timerCycles > 0 && (
+                  <div className="absolute -top-2 -right-2 px-2 py-1 bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold rounded-full">
+                    -{timerCycles * 15} min
+                  </div>
+                )}
+                
                 <motion.div
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 2, repeat: Infinity }}
@@ -100,12 +238,19 @@ export default function Hero() {
                 </motion.div>
                 <div className="text-left">
                   <div className="text-xs font-semibold text-rose-800 uppercase tracking-wide">
-                    Your Personalized Analysis Reserved For:
+                    {timerCycles > 0 ? 'Timer Reset - New Deadline:' : 'Your Personalized Analysis Reserved For:'}
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold text-rose-700 tabular-nums">{formatTime(timeLeft)}</span>
-                    <span className="text-sm text-rose-600 font-medium">minutes</span>
+                    <span className="text-sm text-rose-600 font-medium">
+                      {getCurrentTimerDuration() >= 3600 ? 'hours' : 'minutes'}
+                    </span>
                   </div>
+                  {timerCycles > 0 && (
+                    <div className="text-xs text-rose-600 mt-1">
+                      ⚠️ Timer reduced by {timerCycles * 15} minutes total
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </motion.div>
@@ -219,17 +364,17 @@ export default function Hero() {
                 <div className="bg-gradient-to-r from-purple-100 to-indigo-100 rounded-xl p-4 border border-purple-200">
                   <div className="flex items-center justify-center gap-4">
                     <div className="text-center">
-                      <div className="text-4xl mb-2">🧠</div>
+                      <Brain className="w-10 h-10 text-purple-700 mx-auto mb-2" />
                       <p className="text-xs text-gray-700 font-medium">Your Brain</p>
                     </div>
                     <div className="text-2xl text-purple-600">→</div>
                     <div className="text-center">
-                      <div className="text-4xl mb-2">📍</div>
+                      <Target className="w-10 h-10 text-indigo-700 mx-auto mb-2" />
                       <p className="text-xs text-gray-700 font-medium">Pineal Gland<br/>("Third Eye")</p>
                     </div>
                     <div className="text-2xl text-rose-600">→</div>
                     <div className="text-center">
-                      <div className="text-4xl mb-2">⚠️</div>
+                      <AlertCircle className="w-10 h-10 text-rose-600 mx-auto mb-2" />
                       <p className="text-xs text-gray-700 font-medium">Calcified =<br/>Aging ↑</p>
                     </div>
                   </div>
@@ -297,7 +442,7 @@ export default function Hero() {
                     <div className="text-xs text-gray-600">Duration</div>
                   </div>
                   <div className="text-center p-3 bg-white/60 rounded-lg border border-rose-100 relative">
-                    <div className="text-2xl font-bold text-rose-600">{spotsLeft}</div>
+                    <div className="text-2xl font-bold text-rose-600">{spotsLeft !== null ? spotsLeft : '47'}</div>
                     <div className="text-xs text-gray-600">Spots Left</div>
                     <motion.div
                       animate={{ scale: [1, 1.2, 1] }}
@@ -320,6 +465,22 @@ export default function Hero() {
               transition={{ duration: 0.5, delay: 1.2 }}
               className="space-y-4 mb-8"
             >
+              {/* Indicateur d'urgence persistante */}
+              <div className="bg-gradient-to-r from-amber-50/50 to-orange-50/30 rounded-xl p-4 mb-4 border border-amber-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Timer Active</div>
+                      <div className="text-xs text-gray-600">Resets with -15 min reduction each time</div>
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold text-rose-700">
+                    {spotsLeft !== null ? `${spotsLeft} spots remaining` : 'Loading...'}
+                  </div>
+                </div>
+              </div>
+
               {/* Bouton principal OPTIMISÉ */}
               <div className="relative">
                 <motion.button
@@ -357,7 +518,7 @@ export default function Hero() {
                 >
                   <div className="px-3 py-1.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white text-xs font-bold rounded-full shadow-lg flex items-center gap-1">
                     <Users className="w-3 h-3" />
-                    Only {spotsLeft} spots left
+                    Only {spotsLeft !== null ? spotsLeft : '47'} spots left
                   </div>
                 </motion.div>
               </div>
@@ -395,8 +556,8 @@ export default function Hero() {
                       <span className="text-blue-600 font-bold text-sm">?</span>
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-semibold text-gray-900 mb-1">"Is this scientifically valid?"</p>
-                      <p className="text-sm text-gray-600">✅ Based on research from Institute of Cellular Aging + validated on 12,847 users</p>
+                      <p className="text-sm font-semibold text-gray-900 mb-1">"Why does the timer reset?"</p>
+                      <p className="text-sm text-gray-600">✅ Each visitor gets their own 1h46 timer, which reduces by 15 min for each reset</p>
                     </div>
                   </div>
 
@@ -405,8 +566,8 @@ export default function Hero() {
                       <span className="text-blue-600 font-bold text-sm">?</span>
                     </div>
                     <div className="text-left">
-                      <p className="text-sm font-semibold text-gray-900 mb-1">"Will I receive spam?"</p>
-                      <p className="text-sm text-gray-600">✅ Zero spam. We don't even ask for your email address.</p>
+                      <p className="text-sm font-semibold text-gray-900 mb-1">"Is this scientifically valid?"</p>
+                      <p className="text-sm text-gray-600">✅ Based on research from Institute of Cellular Aging + validated on 12,847 users</p>
                     </div>
                   </div>
 

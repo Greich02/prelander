@@ -21,6 +21,9 @@ const inter = Inter({
 export const metadata = {
   title: "Vitality Assessment",
   description: "A quick assessment exploring your daily energy, mindset, and internal alignment",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({ children }) {

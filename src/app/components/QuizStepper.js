@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Target, Zap, Star, Award, ChevronRight, Clock, Brain, AlertCircle } from 'lucide-react';
+import { getAnalytics, EVENTS } from '@/app/utils/analytics';
 
 const questions = [
   {
@@ -215,21 +216,62 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
   const [showEncouragement, setShowEncouragement] = useState(false);
   const [currentEncouragementMsg, setCurrentEncouragementMsg] = useState('');
   const [recentCompletions, setRecentCompletions] = useState(12847);
-  const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutes
+  const [timeLeft, setTimeLeft] = useState(null); // Synchronisé avec Hero
+  const [quizStartTime] = useState(Date.now());
+  const analytics = getAnalytics();
 
-  // Timer countdown
+  // Constantes de synchronisation avec Hero
+  const TIMER_STORAGE_KEY = 'pineal_timer_data';
+  const SPOTS_STORAGE_KEY = 'pineal_spots_left';
+
+  // NOUVEAU : Synchroniser avec le timer de la Hero
   useEffect(() => {
-    if (timeLeft <= 0) return;
-    const timer = setInterval(() => {
-      setTimeLeft((prevTime) => (prevTime <= 1 ? 0 : prevTime - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [timeLeft]);
+    const updateTimerFromStorage = () => {
+      if (typeof window === 'undefined') return;
+      
+      const savedData = localStorage.getItem(TIMER_STORAGE_KEY);
+      if (savedData) {
+        try {
+          const timerData = JSON.parse(savedData);
+          const now = Math.floor(Date.now() / 1000);
+          const remaining = timerData.deadline - now;
+          setTimeLeft(remaining > 0 ? remaining : 0);
+        } catch {
+          setTimeLeft(0);
+        }
+      } else {
+        // Si pas de timer dans le localStorage, utiliser une valeur par défaut
+        setTimeLeft(15 * 60);
+      }
+    };
+
+    // Mettre à jour immédiatement
+    updateTimerFromStorage();
+
+    // S'abonner aux changements de localStorage
+    const handleStorageChange = (e) => {
+      if (e.key === TIMER_STORAGE_KEY) {
+        updateTimerFromStorage();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Timer pour mettre à jour toutes les secondes
+    const timer = setInterval(updateTimerFromStorage, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(timer);
+    };
+  }, []);
 
   const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    if (seconds === null || seconds < 0) return "01:46:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   // NOUVEAU : Social proof dynamique
@@ -253,6 +295,10 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
 
   const handleStart = () => {
     setHasStarted(true);
+    analytics.track(EVENTS.QUIZ_START, {
+      autoStart: autoStart,
+      timestamp: new Date().toISOString()
+    });
     if (typeof window !== 'undefined') {
       localStorage.setItem('quizStartedAt', new Date().toISOString());
     }
@@ -264,6 +310,14 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
       [questionIndex]: option.text
     };
     setAnswers(newAnswers);
+    
+    // Tracker l'événement de réponse
+    analytics.track(EVENTS.QUIZ_QUESTION_ANSWERED, {
+      questionIndex: questionIndex,
+      selectedAnswer: option.text,
+      selectedValue: option.value,
+      timeSpentOnQuestion: Date.now() - quizStartTime
+    });
     
     // Calculer le nouveau score
     const newScore = Object.keys(newAnswers).reduce((sum, key) => {
@@ -293,11 +347,42 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
     } else {
       // Dernière question → Résultats
       if (typeof window !== 'undefined') {
+        const quizDuration = Date.now() - quizStartTime;
+        const scorePercentage = Math.round((totalScore / (questions.length * 4)) * 100);
+        
+        // Déterminer le pattern
+        let userPattern = 'Unknown';
+        if (scorePercentage <= 40) {
+          userPattern = 'The Disconnected Seeker';
+        } else if (scorePercentage <= 70) {
+          userPattern = 'The Fluctuating Spirit';
+        } else {
+          userPattern = 'The Awakening Guardian';
+        }
+        
+        // Tracker le quiz complété et sauvegarder les infos
+        analytics.setUserInfo(scorePercentage, userPattern);
+        analytics.track(EVENTS.QUIZ_COMPLETED, {
+          totalScore: totalScore,
+          scorePercentage: scorePercentage,
+          userPattern: userPattern,
+          quizDuration: quizDuration,
+          questionsAnswered: Object.keys(answers).length,
+          timerRemaining: timeLeft
+        });
+        
+        // Sauvegarder aussi en localStorage pour les patterns
+        localStorage.setItem('analytics_user_pattern', userPattern);
+        localStorage.setItem('analytics_score_percentage', scorePercentage.toString());
+        
         const results = {
           answers,
           totalScore,
+          scorePercentage,
+          userPattern,
           completedAt: new Date().toISOString(),
-          timeSpent: Math.round((Date.now() - new Date(localStorage.getItem('quizStartedAt')).getTime()) / 1000)
+          timeSpent: Math.round(quizDuration / 1000),
+          timerRemainingAtCompletion: timeLeft
         };
         localStorage.setItem('quizResults', JSON.stringify(results));
         window.location.href = '/results';
@@ -312,6 +397,17 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
   };
 
   const handleBack = () => {
+    if (hasStarted && currentStep > 0) {
+      const questionsAnswered = Object.keys(answers).length;
+      analytics.track(EVENTS.QUIZ_ABANDONED, {
+        questionsAnswered: questionsAnswered,
+        questionsRemaining: questions.length - questionsAnswered,
+        timeSpent: Date.now() - quizStartTime,
+        abandonedAt: `question_${currentStep}`,
+        timerRemaining: timeLeft
+      });
+    }
+    
     if (onBackClick) {
       onBackClick();
     } else {
@@ -332,6 +428,15 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
     ? Math.round((totalScore / ((currentStep + 1) * 4)) * 100)
     : 0;
 
+  // Récupérer les spots restants depuis localStorage
+  const getSpotsLeft = () => {
+    if (typeof window === 'undefined') return 47;
+    const savedSpots = localStorage.getItem(SPOTS_STORAGE_KEY);
+    return savedSpots ? parseInt(savedSpots, 10) : 47;
+  };
+
+  const spotsLeft = getSpotsLeft();
+
   // Page d'intro du quiz (gardée pour accès direct, mais skippée depuis Hero)
   if (!hasStarted) {
     return (
@@ -343,6 +448,31 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
         className="w-full max-w-7xl mx-auto px-6 sm:px-8 md:px-12 lg:px-16 py-10 md:py-16"
       >
         <div className="bg-gradient-to-br from-white to-amber-50/30 rounded-2xl p-8 md:p-12 shadow-xl border border-amber-200 text-center">
+          {/* TIMER SYNCHRONISÉ avec Hero */}
+          {timeLeft !== null && timeLeft > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="inline-flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-rose-50 to-rose-100/50 rounded-xl border-2 border-rose-300 shadow-lg mx-auto mb-6"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <Clock className="w-6 h-6 text-rose-600" />
+              </motion.div>
+              <div className="text-left">
+                <div className="text-xs font-semibold text-rose-800 uppercase tracking-wide">
+                  Same Timer as Homepage:
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-rose-700 tabular-nums">{formatTime(timeLeft)}</span>
+                  <span className="text-sm text-rose-600 font-medium">remaining</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           <div className="mb-8">
             <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-100 to-purple-300 flex items-center justify-center">
               <Brain className="w-10 h-10 text-purple-700" />
@@ -409,23 +539,37 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
       transition={{ duration: 0.6 }}
       className="w-full max-w-7xl mx-auto px-6 sm:px-8 md:px-12 lg:px-16 py-10 md:py-16"
     >
-      {/* NOUVEAU : URGENCE SUR DERNIÈRE QUESTION */}
-      {currentStep === questions.length - 1 && (
+      {/* TIMER SYNCHRONISÉ SUR TOUTES LES PAGES */}
+      {timeLeft !== null && timeLeft > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 p-4 bg-gradient-to-r from-rose-100 to-pink-100 rounded-xl border-2 border-rose-300 shadow-lg"
+          className={`mb-6 p-4 rounded-xl border-2 shadow-lg ${
+            currentStep === questions.length - 1 
+              ? 'bg-gradient-to-r from-rose-100 to-pink-100 border-rose-300'
+              : 'bg-gradient-to-r from-amber-100 to-orange-100 border-amber-300'
+          }`}
         >
-          <div className="flex items-center justify-center gap-3">
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Clock className="w-5 h-5 text-rose-600" />
-            </motion.div>
-            <p className="text-sm font-semibold text-rose-800">
-              ⏰ Your personalized analysis expires in <span className="text-lg font-bold">{formatTime(timeLeft)}</span>
-            </p>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <Clock className="w-5 h-5 text-rose-600" />
+              </motion.div>
+              <div>
+                <div className="text-sm font-semibold text-rose-800">
+                  Your Personalized Analysis Expires In:
+                </div>
+                <div className="text-xs text-rose-700">
+                  Same timer as homepage • {spotsLeft} spots left
+                </div>
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-rose-700 tabular-nums">
+              {formatTime(timeLeft)}
+            </div>
           </div>
         </motion.div>
       )}
@@ -443,7 +587,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* NOUVEAU : Score Preview en Temps Réel */}
+            {/* Score Preview en Temps Réel */}
             {currentScorePercentage > 0 && (
               <div className="flex items-center gap-2 bg-gradient-to-r from-purple-100 to-indigo-100 px-3 py-1.5 rounded-full border border-purple-300">
                 <Brain className="w-4 h-4 text-purple-600" />
@@ -526,7 +670,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
                 {currentQuestion.question}
               </h2>
 
-              {/* NOUVEAU : MICRO-INSIGHT ÉDUCATIF SUR LA PINÉALE */}
+              {/* MICRO-INSIGHT ÉDUCATIF SUR LA PINÉALE */}
               {currentInsight && (
                 <motion.div
                   initial={{ opacity: 0, y: -5 }}
@@ -600,7 +744,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
 
         {/* NAVIGATION BUTTONS OPTIMISÉS */}
         <div className="flex flex-col sm:flex-row gap-3 mt-10 pt-6 border-t border-purple-200/50">
-          {/* OPTIMISÉ : Bouton Previous moins visible */}
+          {/* Bouton Previous */}
           <motion.button
             onClick={handlePrevious}
             whileHover={{ scale: 1.02 }}
@@ -611,7 +755,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
             ← Previous
           </motion.button>
           
-          {/* CTA OPTIMISÉ : Plus spécifique */}
+          {/* CTA PRINCIPAL avec timer intégré */}
           <motion.button
             onClick={handleNext}
             whileHover={{ 
@@ -625,32 +769,42 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
               y: { repeat: Infinity, duration: 2.5, ease: 'easeInOut' },
               default: { type: 'spring', stiffness: 400, damping: 17 }
             }}
-            className="order-1 sm:order-2 flex-1 px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl transition-all group"
+            className="order-1 sm:order-2 flex-1 px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-xl transition-all group relative overflow-hidden"
             disabled={!answers[currentStep]}
           >
-            <span className="flex items-center justify-center gap-2">
-              {currentStep === questions.length - 1 ? (
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-700 to-pink-700 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <span className="relative flex flex-col items-center justify-center gap-1">
+              <span className="flex items-center gap-2">
+                {currentStep === questions.length - 1 ? (
+                  <>
+                    🎯 See My Pineal Health Score
+                    <motion.div
+                      animate={{ x: [0, 5, 0] }}
+                      transition={{ repeat: Infinity, duration: 2.5 }}
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </motion.div>
+                  </>
+                ) : (
+                  <>
+                    Next Question
+                    <ChevronRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </span>
+              {currentStep === questions.length - 1 && (
                 <>
-                  🎯 See My Pineal Health Score
-                  <motion.div
-                    animate={{ x: [0, 5, 0] }}
-                    transition={{ repeat: Infinity, duration: 2.5 }}
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </motion.div>
-                </>
-              ) : (
-                <>
-                  Next Question
-                  <ChevronRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
+                  <span className="block text-xs font-normal text-purple-100">
+                    (Instant analysis • Personalized protocol)
+                  </span>
+                  {timeLeft !== null && timeLeft < 300 && (
+                    <span className="block text-xs font-semibold text-rose-200 mt-1">
+                      ⚠️ Timer expires in {formatTime(timeLeft)} • {spotsLeft} spots left
+                    </span>
+                  )}
                 </>
               )}
             </span>
-            {currentStep === questions.length - 1 && (
-              <span className="block text-xs font-normal text-purple-100 mt-1">
-                (Instant analysis • Personalized protocol)
-              </span>
-            )}
           </motion.button>
         </div>
       </div>
@@ -667,7 +821,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           ></motion.span>
         </p>
         <p className="text-xs text-gray-500 mt-1">
-          94% report discovering patterns they didn't know existed
+          94% report discovering patterns they didn't know existed • {spotsLeft} personalized spots remaining
         </p>
       </div>
     </motion.section>

@@ -3,20 +3,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Gift, Clock, Sparkles, Zap, Brain, CheckCircle, AlertCircle } from 'lucide-react';
+import { submitEmailToGoogleSheets } from '@/app/utils/googleSheets';
+import { getAnalytics, EVENTS } from '@/app/utils/analytics';
 
 export default function ExitPopup() {
   const [showPopup, setShowPopup] = useState(false);
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [userContext, setUserContext] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(10 * 60); // 10 minutes
+  const [timeLeft, setTimeLeft] = useState(10 * 60);
   
-  const mouseYRef = useRef(0);
   const hasShownRef = useRef(false);
   const timeOnPageRef = useRef(0);
   const popupShownTimeRef = useRef(null);
 
-  // Timer countdown pour l'urgence
+  // Timer countdown
   useEffect(() => {
     if (!showPopup || timeLeft <= 0) return;
     const timer = setInterval(() => {
@@ -31,169 +32,178 @@ export default function ExitPopup() {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Déterminer le contexte utilisateur
+  // Déterminer contexte utilisateur
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const quizResults = localStorage.getItem('quizResults');
       const quizStarted = localStorage.getItem('quizStartedAt');
       
       if (quizResults) {
-        setUserContext('completed'); // A complété le quiz
+        setUserContext('completed');
       } else if (quizStarted) {
-        setUserContext('abandoned'); // A commencé mais pas fini
+        setUserContext('abandoned');
       } else {
-        setUserContext('browsing'); // Juste browse
+        setUserContext('browsing');
       }
     }
   }, []);
 
-  // Tracking helper
+  // Tracking
   const trackEvent = (eventName, properties = {}) => {
-    // Google Analytics 4
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('event', eventName, properties);
     }
-    
-    // Console pour debug
     console.log('📊 Event:', eventName, properties);
   };
 
-  // TRIGGERS INTELLIGENTS
+  // ═══════════════════════════════════════════════════════════
+  // TRIGGERS OPTIMISÉS
+  // ═══════════════════════════════════════════════════════════
   useEffect(() => {
-    // Vérifier si déjà montré
-    const popupShown = sessionStorage.getItem('exitPopupShown');
-    if (popupShown) {
+    // ✅ FIX #1 : Vérifier localStorage au lieu de sessionStorage
+    // Permet 1 affichage par JOUR au lieu de 1 par SESSION
+    const lastShown = localStorage.getItem('exitPopupLastShown');
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    
+    if (lastShown && (now - parseInt(lastShown)) < oneDayMs) {
       hasShownRef.current = true;
+      console.log('⏸️ Exit popup: Already shown in last 24h');
       return;
     }
 
-    // Tracker le temps sur la page
+    // Tracker temps sur page
     const startTime = Date.now();
     const timeTracker = setInterval(() => {
       timeOnPageRef.current = Math.floor((Date.now() - startTime) / 1000);
     }, 1000);
 
-    // ═══════════════════════════════════════════════════════════
-    // TRIGGER #1 : EXIT INTENT (Mouse Leave) - Desktop uniquement
-    // ═══════════════════════════════════════════════════════════
-    const handleMouseLeave = (e) => {
-      // Conditions pour afficher :
-      // 1. Souris sort par le haut (intention de fermer/changer onglet)
-      // 2. Au moins 10 secondes sur la page
-      // 3. Pas déjà affiché
-      if (
-        e.clientY < 10 && 
-        mouseYRef.current > 10 && 
-        timeOnPageRef.current > 10 &&
-        !hasShownRef.current
-      ) {
-        setShowPopup(true);
-        hasShownRef.current = true;
-        sessionStorage.setItem('exitPopupShown', 'true');
-        popupShownTimeRef.current = Date.now();
-        
-        trackEvent('exit_popup_triggered', {
-          trigger_type: 'mouse_leave',
-          time_on_page: timeOnPageRef.current,
-          user_context: userContext
-        });
-      }
-      mouseYRef.current = e.clientY;
+    // Helper pour afficher popup
+    const triggerPopup = (triggerType) => {
+      if (hasShownRef.current) return;
+      
+      setShowPopup(true);
+      hasShownRef.current = true;
+      localStorage.setItem('exitPopupLastShown', Date.now().toString());
+      popupShownTimeRef.current = Date.now();
+      
+      trackEvent('exit_popup_triggered', {
+        trigger_type: triggerType,
+        time_on_page: timeOnPageRef.current,
+        user_context: userContext
+      });
+      
+      console.log('🎯 Exit popup triggered:', triggerType);
     };
 
     // ═══════════════════════════════════════════════════════════
-    // TRIGGER #2 : INACTIVITÉ PROLONGÉE (45 secondes)
+    // ✅ FIX #2 : EXIT INTENT plus permissif
+    // ═══════════════════════════════════════════════════════════
+    const handleMouseLeave = (e) => {
+      // Conditions SIMPLIFIÉES :
+      // 1. Souris sort par le haut (< 50px au lieu de < 10px)
+      // 2. Au moins 5 secondes sur page (au lieu de 10)
+      if (
+        e.clientY < 50 &&  // ✅ Zone plus large
+        timeOnPageRef.current >= 5 && // ✅ Temps réduit
+        !hasShownRef.current
+      ) {
+        triggerPopup('mouse_leave');
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // ✅ FIX #3 : INACTIVITÉ corrigée (30 secondes au lieu de 45)
     // ═══════════════════════════════════════════════════════════
     let inactivityTimer;
     const resetInactivityTimer = () => {
       clearTimeout(inactivityTimer);
+      
+      // ✅ Afficher après 30 secondes d'INACTIVITÉ (pas 30s + 30s)
       inactivityTimer = setTimeout(() => {
-        if (!hasShownRef.current && timeOnPageRef.current > 45) {
-          setShowPopup(true);
-          hasShownRef.current = true;
-          sessionStorage.setItem('exitPopupShown', 'true');
-          popupShownTimeRef.current = Date.now();
-          
-          trackEvent('exit_popup_triggered', {
-            trigger_type: 'inactivity',
-            time_on_page: timeOnPageRef.current,
-            user_context: userContext
-          });
+        if (!hasShownRef.current && timeOnPageRef.current >= 10) {
+          triggerPopup('inactivity');
         }
-      }, 45000); // 45 secondes d'inactivité
+      }, 30000); // 30 secondes d'inactivité
     };
 
     // ═══════════════════════════════════════════════════════════
-    // TRIGGER #3 : SCROLL BOUNCE (Scroll profond puis remontée)
+    // ✅ FIX #4 : SCROLL BACK simplifié
     // ═══════════════════════════════════════════════════════════
     let lastScrollY = 0;
     let maxScrollDepth = 0;
+    
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      const scrollDepth = (currentScrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+      const scrollHeight = document.body.scrollHeight - window.innerHeight;
+      const scrollDepth = scrollHeight > 0 ? (currentScrollY / scrollHeight) * 100 : 0;
       
       maxScrollDepth = Math.max(maxScrollDepth, scrollDepth);
       
-      // Si l'utilisateur a scrollé au moins 60%, puis remonte rapidement en haut
+      // ✅ Conditions SIMPLIFIÉES :
+      // Si scrollé au moins 40% (au lieu de 60%)
+      // ET remonte vers le haut (200px au lieu de 100px)
       if (
-        maxScrollDepth > 60 && 
-        currentScrollY < 100 && 
-        lastScrollY > 500 &&
-        timeOnPageRef.current > 20 &&
+        maxScrollDepth >= 40 && // ✅ Seuil réduit
+        currentScrollY < 200 &&  // ✅ Zone plus permissive
+        lastScrollY - currentScrollY > 300 && // ✅ Détecte remontée rapide
+        timeOnPageRef.current >= 15 && // ✅ Temps réduit
         !hasShownRef.current
       ) {
-        setShowPopup(true);
-        hasShownRef.current = true;
-        sessionStorage.setItem('exitPopupShown', 'true');
-        popupShownTimeRef.current = Date.now();
-        
-        trackEvent('exit_popup_triggered', {
-          trigger_type: 'scroll_bounce',
-          time_on_page: timeOnPageRef.current,
-          max_scroll_depth: Math.round(maxScrollDepth),
-          user_context: userContext
-        });
+        triggerPopup('scroll_back');
       }
       
       lastScrollY = currentScrollY;
       resetInactivityTimer();
     };
 
+    // ═══════════════════════════════════════════════════════════
+    // ✅ NOUVEAU : TRIGGER TEMPS ABSOLU (Backup garantie)
+    // ═══════════════════════════════════════════════════════════
+    // Si aucun autre trigger après 60 secondes, afficher quand même
+    const absoluteTimer = setTimeout(() => {
+      if (!hasShownRef.current && timeOnPageRef.current >= 60) {
+        triggerPopup('time_absolute');
+      }
+    }, 60000); // 60 secondes
+
     // Event listeners
-    const isDesktop = window.innerWidth > 768;
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
     
-    // Mouse leave uniquement sur desktop
     if (isDesktop) {
       document.addEventListener('mouseleave', handleMouseLeave);
     }
     
-    // Inactivité et scroll sur tous les devices
     document.addEventListener('mousemove', resetInactivityTimer);
     document.addEventListener('keydown', resetInactivityTimer);
     document.addEventListener('click', resetInactivityTimer);
+    document.addEventListener('touchstart', resetInactivityTimer); // ✅ Ajout mobile
     window.addEventListener('scroll', handleScroll);
     
     resetInactivityTimer();
 
+    // Cleanup
     return () => {
       clearInterval(timeTracker);
       clearTimeout(inactivityTimer);
+      clearTimeout(absoluteTimer);
+      
       if (isDesktop) {
         document.removeEventListener('mouseleave', handleMouseLeave);
       }
       document.removeEventListener('mousemove', resetInactivityTimer);
       document.removeEventListener('keydown', resetInactivityTimer);
-      document.addEventListener('click', resetInactivityTimer);
+      document.removeEventListener('click', resetInactivityTimer);
+      document.removeEventListener('touchstart', resetInactivityTimer);
       window.removeEventListener('scroll', handleScroll);
     };
   }, [userContext]);
 
+  // ... (Reste du code identique : getPopupContent, handleSubmit, handleClose, JSX)
+  
   // Contenu dynamique basé sur contexte utilisateur
   const getPopupContent = () => {
     switch (userContext) {
-      // ═══════════════════════════════════════════════════════════
-      // CAS 1 : A COMPLÉTÉ LE QUIZ
-      // ═══════════════════════════════════════════════════════════
       case 'completed':
         return {
           icon: <Gift className="w-8 h-8 text-purple-600" />,
@@ -213,9 +223,6 @@ export default function ExitPopup() {
           ]
         };
       
-      // ═══════════════════════════════════════════════════════════
-      // CAS 2 : A COMMENCÉ MAIS ABANDONNÉ LE QUIZ
-      // ═══════════════════════════════════════════════════════════
       case 'abandoned':
         return {
           icon: <AlertCircle className="w-8 h-8 text-amber-600" />,
@@ -236,9 +243,6 @@ export default function ExitPopup() {
           ]
         };
       
-      // ═══════════════════════════════════════════════════════════
-      // CAS 3 : JUSTE EN TRAIN DE BROWSER (pas commencé le quiz)
-      // ═══════════════════════════════════════════════════════════
       case 'browsing':
       default:
         return {
@@ -267,7 +271,6 @@ export default function ExitPopup() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // CAS : Redirection vers quiz (abandoned ou browsing)
     if (popupContent.action === 'resume-quiz') {
       trackEvent('exit_popup_action', {
         action: 'resume_quiz',
@@ -296,31 +299,50 @@ export default function ExitPopup() {
       return;
     }
 
-    // CAS : Collecte email (completed uniquement)
     if (email.trim()) {
+      const analytics = getAnalytics();
+      
       trackEvent('exit_popup_email_submitted', {
         user_context: userContext,
         time_visible: popupShownTimeRef.current ? Math.round((Date.now() - popupShownTimeRef.current) / 1000) : 0
       });
 
-      // ═══════════════════════════════════════════════════════════
-      // INTÉGRATION EMAIL - Zapier Webhook
-      // ═══════════════════════════════════════════════════════════
-      fetch('VOTRE_ZAPIER_WEBHOOK_URL', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email,
-          source: 'exit_popup',
-          user_context: userContext,
-          lead_magnet: 'pineal_foods_guide',
-          timestamp: new Date().toISOString()
+      // Track to analytics
+      analytics?.track(EVENTS.EXIT_POPUP_EMAIL_SUBMITTED, {
+        email: email,
+        userContext: userContext
+      });
+
+      // Get user info for Google Sheets
+      let userPattern = 'Unknown';
+      let vitalityScore = 0;
+      
+      if (typeof window !== 'undefined') {
+        const quizResults = localStorage.getItem('quizResults');
+        if (quizResults) {
+          try {
+            const results = JSON.parse(quizResults);
+            vitalityScore = results.totalScore || 0;
+            userPattern = localStorage.getItem('analytics_user_pattern') || 'Unknown';
+          } catch (e) {
+            console.error('Error parsing quiz results:', e);
+          }
+        }
+      }
+
+      // Submit to Google Sheets
+      submitEmailToGoogleSheets(email, userPattern, vitalityScore)
+        .then(result => {
+          if (result.success) {
+            console.log('✅ Email saved to Google Sheets');
+          } else {
+            console.warn('⚠️ Could not save to Google Sheets:', result.message);
+          }
         })
-      }).catch(err => console.error('Webhook error:', err));
+        .catch(err => console.error('Error submitting to Google Sheets:', err));
 
       setSubmitted(true);
       
-      // Masquer après 3 secondes
       setTimeout(() => {
         setShowPopup(false);
         setSubmitted(false);
@@ -357,7 +379,6 @@ export default function ExitPopup() {
           onClick={(e) => e.stopPropagation()}
           className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden relative"
         >
-          {/* Close Button */}
           <button
             onClick={handleClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
@@ -367,7 +388,6 @@ export default function ExitPopup() {
 
           {!submitted ? (
             <div className="p-8 md:p-10">
-              {/* Icon */}
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -377,14 +397,13 @@ export default function ExitPopup() {
                 {popupContent.icon}
               </motion.div>
 
-              {/* Urgence Badge */}
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="mb-4"
+                className="mb-4 flex justify-center"
               >
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-rose-100 rounded-full border border-rose-300 mx-auto">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-rose-100 rounded-full border border-rose-300">
                   <Clock className="w-4 h-4 text-rose-600" />
                   <span className="text-xs font-semibold text-rose-800">
                     {popupContent.urgency}
@@ -392,7 +411,6 @@ export default function ExitPopup() {
                 </div>
               </motion.div>
 
-              {/* Headline */}
               <motion.h2
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -402,7 +420,6 @@ export default function ExitPopup() {
                 {popupContent.headline}
               </motion.h2>
 
-              {/* Subheadline */}
               <motion.p
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -412,7 +429,6 @@ export default function ExitPopup() {
                 {popupContent.subheadline}
               </motion.p>
 
-              {/* Description */}
               <motion.p
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -422,7 +438,6 @@ export default function ExitPopup() {
                 {popupContent.description}
               </motion.p>
 
-              {/* Benefits */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -447,7 +462,6 @@ export default function ExitPopup() {
                 </div>
               </motion.div>
 
-              {/* Form ou CTA direct */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -455,7 +469,6 @@ export default function ExitPopup() {
                 className="space-y-4"
               >
                 {popupContent.showEmailForm ? (
-                  // EMAIL FORM (uniquement pour 'completed')
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <input
                       type="email"
@@ -476,7 +489,6 @@ export default function ExitPopup() {
                     </motion.button>
                   </form>
                 ) : (
-                  // CTA DIRECT (pour 'abandoned' et 'browsing')
                   <motion.button
                     onClick={handleSubmit}
                     whileHover={{ scale: 1.02, y: -2 }}
@@ -487,7 +499,6 @@ export default function ExitPopup() {
                   </motion.button>
                 )}
 
-                {/* Secondary CTA */}
                 <button
                   type="button"
                   onClick={handleClose}
@@ -497,7 +508,6 @@ export default function ExitPopup() {
                 </button>
               </motion.div>
 
-              {/* Trust Signal */}
               {popupContent.showEmailForm && (
                 <motion.p
                   initial={{ opacity: 0 }}
@@ -511,7 +521,6 @@ export default function ExitPopup() {
               )}
             </div>
           ) : (
-            // SUCCESS STATE
             <div className="p-8 md:p-10 text-center">
               <motion.div
                 initial={{ scale: 0 }}
