@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1770625901600,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Awakening Guardian",
+    "vitalityScore": 15,
+    "context": "completed",
+    "submittedAt": "2026-02-09T08:31:41.601Z",
+    "emailSent": false,
+    "source": "exit_popup"
+  },
+  {
+    "id": 1770626003396,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Fluctuating Spirit",
+    "vitalityScore": 12,
+    "context": "completed",
+    "submittedAt": "2026-02-09T08:33:23.410Z",
+    "emailSent": true,
+    "source": "exit_popup"
+  }
+]

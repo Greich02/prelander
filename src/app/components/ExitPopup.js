@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Gift, Clock, Sparkles, Zap, Brain, CheckCircle, AlertCircle } from 'lucide-react';
 import { submitEmailToGoogleSheets } from '@/app/utils/googleSheets';
+import { sendEmailWithAttachment } from '@/app/utils/sendEmail';
 import { getAnalytics, EVENTS } from '@/app/utils/analytics';
 
 export default function ExitPopup() {
@@ -48,13 +49,53 @@ export default function ExitPopup() {
     }
   }, []);
 
-  // Tracking
+  // ═══════════════════════════════════════════════════════════
+  // 📊 TRACKING GOOGLE ANALYTICS AVANCÉ
+  // ═══════════════════════════════════════════════════════════
   const trackEvent = (eventName, properties = {}) => {
     if (typeof window !== 'undefined' && window.gtag) {
-      window.gtag('event', eventName, properties);
+      // Envoi à Google Analytics avec tous les paramètres
+      window.gtag('event', eventName, {
+        ...properties,
+        'engagement_time_msec': 100, // Optionnel: pour mesurer l'engagement
+      });
     }
-    console.log('📊 Event:', eventName, properties);
+    console.log('📊 Analytics Event:', eventName, properties);
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ NOUVEAU TRIGGER : RESULTS PAGE (5 secondes)
+  // ═══════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (typeof window !== 'undefined' && userContext === 'completed') {
+      // Vérifier si on est sur la page results
+      const isResultsPage = window.location.pathname === '/results';
+      
+      if (isResultsPage && !hasShownRef.current) {
+        // Afficher le popup 5 secondes après arrivée sur results
+        const resultsTimer = setTimeout(() => {
+          if (!hasShownRef.current) {
+            setShowPopup(true);
+            hasShownRef.current = true;
+            localStorage.setItem('exitPopupLastShown', Date.now().toString());
+            popupShownTimeRef.current = Date.now();
+            
+            // 📊 Tracking: Popup affiché sur results page
+            trackEvent('exit_popup_triggered', {
+              trigger_type: 'results_page_5s',
+              time_on_page: 5,
+              user_context: 'completed',
+              page: 'results'
+            });
+            
+            console.log('🎯 Popup affichée après 5 secondes sur Results page');
+          }
+        }, 5000); // 5 secondes
+        
+        return () => clearTimeout(resultsTimer);
+      }
+    }
+  }, [userContext]);
 
   // ═══════════════════════════════════════════════════════════
   // TRIGGERS OPTIMISÉS
@@ -313,7 +354,7 @@ export default function ExitPopup() {
         userContext: userContext
       });
 
-      // Get user info for Google Sheets
+      // Get user info for email & Google Sheets
       let userPattern = 'Unknown';
       let vitalityScore = 0;
       
@@ -330,16 +371,58 @@ export default function ExitPopup() {
         }
       }
 
-      // Submit to Google Sheets
+      // ═════════════════════════════════════════════════════════
+      // 1️⃣ ENVOYER EMAIL AVEC PIÈCE JOINTE + SAUVEGARDER LES DONNÉES
+      // ═════════════════════════════════════════════════════════
+      sendEmailWithAttachment(email, {
+        userPattern,
+        vitalityScore,
+        context: userContext
+      })
+        .then(result => {
+          if (result.success) {
+            console.log('✅ Email envoyé avec succès et données sauvegardées');
+            
+            // 📊 Track: Email envoyé avec succès
+            trackEvent('exit_popup_email_sent_success', {
+              email: email.split('@')[0].substring(0, 3) + '***', // Anonymise l'email
+              user_pattern: userPattern,
+              vitality_score: vitalityScore,
+              user_context: userContext,
+              popup_duration_sec: Math.round((Date.now() - popupShownTimeRef.current) / 1000)
+            });
+          } else {
+            console.warn('⚠️ Erreur lors de l\'envoi de l\'email:', result.message);
+            
+            // 📊 Track: Erreur lors de l'envoi
+            trackEvent('exit_popup_email_sent_error', {
+              error_message: result.message,
+              user_context: userContext
+            });
+          }
+        })
+        .catch(err => {
+          console.error('Erreur:', err);
+          
+          // 📊 Track: Exception lors de l'envoi
+          trackEvent('exit_popup_email_exception', {
+            error: err.message,
+            user_context: userContext
+          });
+        });
+
+      // ═════════════════════════════════════════════════════════
+      // 2️⃣ SAUVEGARDER AUSSI DANS GOOGLE SHEETS (optionnel, backup)
+      // ═════════════════════════════════════════════════════════
       submitEmailToGoogleSheets(email, userPattern, vitalityScore)
         .then(result => {
           if (result.success) {
-            console.log('✅ Email saved to Google Sheets');
+            console.log('✅ Email sauvegardé aussi dans Google Sheets');
           } else {
-            console.warn('⚠️ Could not save to Google Sheets:', result.message);
+            console.warn('⚠️ Erreur Google Sheets (pas critique):', result.message);
           }
         })
-        .catch(err => console.error('Error submitting to Google Sheets:', err));
+        .catch(err => console.warn('Google Sheets non disponible:', err));
 
       setSubmitted(true);
       
@@ -352,11 +435,14 @@ export default function ExitPopup() {
   };
 
   const handleClose = () => {
+    // 📊 Track: Popup fermée sans envoi
     trackEvent('exit_popup_dismissed', {
       user_context: userContext,
-      time_visible: popupShownTimeRef.current ? Math.round((Date.now() - popupShownTimeRef.current) / 1000) : 0
+      time_visible_sec: popupShownTimeRef.current ? Math.round((Date.now() - popupShownTimeRef.current) / 1000) : 0,
+      popup_trigger: 'close_button'
     });
     
+    console.log('❌ Popup fermée sans soumission');
     setShowPopup(false);
   };
 

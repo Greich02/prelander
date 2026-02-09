@@ -223,12 +223,7 @@ export default function Hero() {
                 transition={{ duration: 0.5, delay: 0.3 }}
                 className="inline-flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-rose-50 to-rose-100/50 rounded-xl border-2 border-rose-300 shadow-xl mx-auto relative"
               >
-                {/* Indicateur de réduction */}
-                {timerCycles > 0 && (
-                  <div className="absolute -top-2 -right-2 px-2 py-1 bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold rounded-full">
-                    -{timerCycles * 15} min
-                  </div>
-                )}
+
                 
                 <motion.div
                   animate={{ scale: [1, 1.1, 1] }}
@@ -246,11 +241,6 @@ export default function Hero() {
                       {getCurrentTimerDuration() >= 3600 ? 'hours' : 'minutes'}
                     </span>
                   </div>
-                  {timerCycles > 0 && (
-                    <div className="text-xs text-rose-600 mt-1">
-                      ⚠️ Timer reduced by {timerCycles * 15} minutes total
-                    </div>
-                  )}
                 </div>
               </motion.div>
             </motion.div>

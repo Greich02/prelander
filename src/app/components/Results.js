@@ -332,12 +332,6 @@ export default function Results({ isVisible, onCTAClick }) {
           >
             {/* Badge du timer */}
             <div className="inline-flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-rose-50 to-pink-50 rounded-xl border-2 border-rose-300 shadow-lg relative">
-              {timerCycles > 0 && (
-                <div className="absolute -top-2 -right-2 px-2 py-1 bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold rounded-full">
-                  -{timerCycles * 15} min
-                </div>
-              )}
-              
               <motion.div
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
