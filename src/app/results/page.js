@@ -10,6 +10,37 @@ export default function ResultsPage() {
 
   useEffect(() => {
     setMounted(true);
+
+    // ═════════════════════════════════════════════════════════
+    // 📱 X (Twitter) Conversion Tracking
+    // ═════════════════════════════════════════════════════════
+    if (typeof window !== 'undefined') {
+      // Charger le script de tracking X
+      if (!window.twq) {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://static.ads-twitter.com/uwt.js';
+        document.head.appendChild(script);
+        
+        // Initialiser après chargement du script
+        window.twq = function() {
+          (window.twq?.queue || []).push(arguments);
+        };
+        window.twq.version = '1.1';
+        window.twq.queue = [];
+      }
+
+      // Configuration X tracking
+      if (window.twq) {
+        window.twq('config', 'r1bmm');
+      }
+
+      // Track que l'utilisateur a vue la page results
+      if (window.twq) {
+        window.twq('track', 'PageView');
+        console.log('📱 X (Twitter) tracking initialized');
+      }
+    }
   }, []);
 
   if (!mounted) {

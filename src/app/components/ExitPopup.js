@@ -64,35 +64,35 @@ export default function ExitPopup() {
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ NOUVEAU TRIGGER : RESULTS PAGE (5 secondes)
+  // ✅ NOUVEAU TRIGGER : RESULTS PAGE (5 secondes) - À CHAQUE FOIS
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (typeof window !== 'undefined' && userContext === 'completed') {
       // Vérifier si on est sur la page results
       const isResultsPage = window.location.pathname === '/results';
       
-      if (isResultsPage && !hasShownRef.current) {
-        // Afficher le popup 5 secondes après arrivée sur results
+      if (isResultsPage) {
+        // Afficher le popup 5 secondes après arrivée sur results - À CHAQUE FOIS
         const resultsTimer = setTimeout(() => {
-          if (!hasShownRef.current) {
-            setShowPopup(true);
-            hasShownRef.current = true;
-            localStorage.setItem('exitPopupLastShown', Date.now().toString());
-            popupShownTimeRef.current = Date.now();
-            
-            // 📊 Tracking: Popup affiché sur results page
-            trackEvent('exit_popup_triggered', {
-              trigger_type: 'results_page_5s',
-              time_on_page: 5,
-              user_context: 'completed',
-              page: 'results'
-            });
-            
-            console.log('🎯 Popup affichée après 5 secondes sur Results page');
-          }
+          // PAS DE hasShownRef.current check pour results page
+          // On affiche à CHAQUE FOIS qu'on arrive sur results
+          setShowPopup(true);
+          popupShownTimeRef.current = Date.now();
+          
+          // 📊 Tracking: Popup affiché sur results page
+          trackEvent('exit_popup_triggered', {
+            trigger_type: 'results_page_5s',
+            time_on_page: 5,
+            user_context: 'completed',
+            page: 'results'
+          });
+          
+          console.log('🎯 Popup affichée après 5 secondes sur Results page');
         }, 5000); // 5 secondes
         
-        return () => clearTimeout(resultsTimer);
+        return () => {
+          clearTimeout(resultsTimer);
+        };
       }
     }
   }, [userContext]);
@@ -467,18 +467,18 @@ export default function ExitPopup() {
         >
           <button
             onClick={handleClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-400 hover:text-gray-600 transition-colors z-10 w-7 sm:w-8 h-7 sm:h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
           >
-            <X size={20} />
+            <X size={18} className="sm:w-5 sm:h-5" />
           </button>
 
           {!submitted ? (
-            <div className="p-8 md:p-10">
+            <div className="p-6 sm:p-8 md:p-10 max-h-[90vh] overflow-y-auto">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', damping: 15, delay: 0.1 }}
-                className={`w-16 h-16 rounded-full bg-gradient-to-br ${popupContent.iconBg} flex items-center justify-center mx-auto mb-6`}
+                className={`w-16 h-16 rounded-full bg-gradient-to-br ${popupContent.iconBg} flex items-center justify-center mx-auto mb-4 sm:mb-6`}
               >
                 {popupContent.icon}
               </motion.div>
@@ -487,10 +487,10 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="mb-4 flex justify-center"
+                className="mb-3 sm:mb-4 flex justify-center"
               >
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-rose-100 rounded-full border border-rose-300">
-                  <Clock className="w-4 h-4 text-rose-600" />
+                <div className="inline-flex items-center gap-2 px-3 py-1 sm:py-1.5 bg-rose-100 rounded-full border border-rose-300">
+                  <Clock className="w-3 sm:w-4 h-3 sm:h-4 text-rose-600" />
                   <span className="text-xs font-semibold text-rose-800">
                     {popupContent.urgency}
                   </span>
@@ -501,7 +501,7 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="text-2xl md:text-3xl font-bold text-gray-900 mb-3 leading-tight text-center"
+                className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-2 sm:mb-3 leading-tight text-center"
               >
                 {popupContent.headline}
               </motion.h2>
@@ -510,7 +510,7 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="text-lg font-semibold text-gray-700 mb-4 text-center"
+                className="text-base sm:text-lg font-semibold text-gray-700 mb-3 sm:mb-4 text-center"
               >
                 {popupContent.subheadline}
               </motion.p>
@@ -519,7 +519,7 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
-                className="text-base text-gray-600 mb-6 leading-relaxed text-center"
+                className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 leading-relaxed text-center"
               >
                 {popupContent.description}
               </motion.p>
@@ -528,21 +528,21 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 }}
-                className="mb-6 bg-gradient-to-br from-gray-50 to-white rounded-xl p-5 border border-gray-200"
+                className="mb-4 sm:mb-6 bg-gradient-to-br from-gray-50 to-white rounded-lg sm:rounded-xl p-3 sm:p-4 md:p-5 border border-gray-200"
               >
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-2.5 md:space-y-3">
                   {popupContent.benefits.map((benefit, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.7 + (index * 0.1) }}
-                      className="flex items-start gap-3"
+                      className="flex items-start gap-2 sm:gap-2.5 md:gap-3"
                     >
-                      <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <CheckCircle className="w-3 h-3 text-white" />
+                      <div className="w-4 sm:w-4 md:w-5 h-4 sm:h-4 md:h-5 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <CheckCircle className="w-2 sm:w-2.5 md:w-3 h-2 sm:h-2.5 md:h-3 text-white" />
                       </div>
-                      <p className="text-sm text-gray-700 font-medium">{benefit}</p>
+                      <p className="text-xs sm:text-xs md:text-sm text-gray-700 font-medium">{benefit}</p>
                     </motion.div>
                   ))}
                 </div>
@@ -555,21 +555,21 @@ export default function ExitPopup() {
                 className="space-y-4"
               >
                 {popupContent.showEmailForm ? (
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                  <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
                     <input
                       type="email"
                       placeholder="Enter your email address"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="w-full px-4 py-3.5 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-base"
+                      className="w-full px-4 sm:px-5 py-4 sm:py-4 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition text-base sm:text-lg placeholder:text-sm sm:placeholder:text-base"
                     />
 
                     <motion.button
                       type="submit"
                       whileHover={{ scale: 1.02, y: -2 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`w-full px-6 py-4 bg-gradient-to-r ${popupContent.ctaColor} text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300`}
+                      className={`w-full px-6 py-4 sm:py-5 bg-gradient-to-r ${popupContent.ctaColor} text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300`}
                     >
                       {popupContent.cta}
                     </motion.button>
@@ -579,7 +579,7 @@ export default function ExitPopup() {
                     onClick={handleSubmit}
                     whileHover={{ scale: 1.02, y: -2 }}
                     whileTap={{ scale: 0.98 }}
-                    className={`w-full px-6 py-4 bg-gradient-to-r ${popupContent.ctaColor} text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300`}
+                    className={`w-full px-6 py-4 sm:py-5 bg-gradient-to-r ${popupContent.ctaColor} text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300`}
                   >
                     {popupContent.cta}
                   </motion.button>
@@ -588,7 +588,7 @@ export default function ExitPopup() {
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="w-full px-6 py-2.5 text-gray-600 font-medium hover:text-gray-800 transition text-sm"
+                  className="w-full px-4 sm:px-6 py-2 sm:py-2.5 text-gray-600 font-medium hover:text-gray-800 transition text-xs sm:text-sm"
                 >
                   No thanks, I'll miss out
                 </button>
@@ -599,29 +599,29 @@ export default function ExitPopup() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1.0 }}
-                  className="text-xs text-gray-500 text-center mt-4 flex items-center justify-center gap-2"
+                  className="text-xs text-gray-500 text-center mt-3 sm:mt-4 flex items-center justify-center gap-1 sm:gap-2 flex-wrap"
                 >
-                  <CheckCircle className="w-3 h-3 text-emerald-500" />
-                  No spam • Instant delivery • Unsubscribe anytime
+                  <CheckCircle className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-emerald-500" />
+                  <span>No spam • Instant delivery • Unsubscribe anytime</span>
                 </motion.p>
               )}
             </div>
           ) : (
-            <div className="p-8 md:p-10 text-center">
+            <div className="p-6 sm:p-8 md:p-10 text-center max-h-[90vh] overflow-y-auto">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', damping: 15, stiffness: 100 }}
-                className="w-20 h-20 bg-gradient-to-br from-emerald-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-6"
+                className="w-14 sm:w-16 md:w-20 h-14 sm:h-16 md:h-20 bg-gradient-to-br from-emerald-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 md:mb-6"
               >
-                <CheckCircle className="w-10 h-10 text-emerald-600" />
+                <CheckCircle className="w-6 sm:w-8 md:w-10 h-6 sm:h-8 md:h-10 text-emerald-600" />
               </motion.div>
 
               <motion.h3
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="text-3xl font-bold text-gray-900 mb-3"
+                className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 md:mb-3"
               >
                 Perfect! 🎉
               </motion.h3>
@@ -630,7 +630,7 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="text-lg text-gray-700 mb-2"
+                className="text-sm sm:text-base md:text-lg text-gray-700 mb-2"
               >
                 Check your inbox in the next 2 minutes!
               </motion.p>
@@ -639,7 +639,7 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="text-base text-gray-600"
+                className="text-xs sm:text-sm md:text-base text-gray-600"
               >
                 Your <span className="font-semibold">9 Pineal Foods Guide</span> is on its way.
               </motion.p>
@@ -648,9 +648,9 @@ export default function ExitPopup() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.4 }}
-                className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200"
+                className="mt-4 sm:mt-6 p-3 sm:p-4 md:p-5 bg-blue-50 rounded-lg sm:rounded-xl border border-blue-200"
               >
-                <p className="text-sm text-blue-800 font-medium">
+                <p className="text-xs sm:text-sm text-blue-800 font-medium">
                   💡 Pro Tip: Add us to your contacts to ensure delivery!
                 </p>
               </motion.div>
