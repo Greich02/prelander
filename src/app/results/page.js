@@ -23,14 +23,14 @@ export default function ResultsPage() {
           console.log('✅ X PageView tracked on Results page');
           
           // Track custom event (optionnel - si configuré dans X Ads)
-          // Décommenter seulement si tw-r1bmm-r4i67 existe dans votre Events Manager
-          /*
+           //Décommenter seulement si tw-r1bmm-r4i67 existe dans votre Events Manager
+          
           window.twq('event', 'tw-r1bmm-r4i67', {
             content_name: 'Quiz Results',
             content_type: 'page_view'
           });
           console.log('✅ X custom event tracked: tw-r1bmm-r4i67');
-          */
+          
           
         } catch (error) {
           console.error('❌ X tracking error:', error);
