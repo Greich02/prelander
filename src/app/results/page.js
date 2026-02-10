@@ -12,62 +12,38 @@ export default function ResultsPage() {
     setMounted(true);
 
     // ═════════════════════════════════════════════════════════
-    // 📱 X (Twitter) Conversion Tracking
+    // 📱 X (Twitter) PIXEL TRACKING - VERSION JAVASCRIPT
     // ═════════════════════════════════════════════════════════
-    if (typeof window !== 'undefined') {
-      // Charger le script de tracking X
-      if (!window.twq) {
-        const script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://static.ads-twitter.com/uwt.js';
-        document.head.appendChild(script);
-        
-        // Initialiser après chargement du script
-        window.twq = function() {
-          (window.twq?.queue || []).push(arguments);
-        };
-        window.twq.version = '1.1';
-        window.twq.queue = [];
-      }
-
-      // Configuration X tracking
-      if (window.twq) {
-        window.twq('config', 'r1bmm');
-      }
-
-      // Track que l'utilisateur a vue la page results
-      if (window.twq) {
-        window.twq('track', 'PageView');
-        console.log('📱 X (Twitter) tracking initialized');
-      }
-
-      // ═══════════════════════════════════════════════════════
-      // 🔥 X (Twitter) Conversion Event
-      // ═══════════════════════════════════════════════════════
-      // Fire conversion event when user reaches results page
-      setTimeout(() => {
-        if (window.twq) {
+    
+    const trackPageView = () => {
+      if (typeof window !== 'undefined' && window.twq) {
+        try {
+          // Track PageView standard
+          window.twq('track', 'PageView');
+          console.log('✅ X PageView tracked on Results page');
+          
+          // Track custom event (optionnel - si configuré dans X Ads)
+          // Décommenter seulement si tw-r1bmm-r4i67 existe dans votre Events Manager
+          /*
           window.twq('event', 'tw-r1bmm-r4i67', {
-            value: null,
-            currency: null,
-            contents: [
-              {
-                content_type: null,
-                content_id: null,
-                content_name: null,
-                content_price: null,
-                num_items: null,
-                content_group_id: null
-              }
-            ],
-            conversion_id: null,
-            email_address: null,
-            phone_number: null
+            content_name: 'Quiz Results',
+            content_type: 'page_view'
           });
-          console.log('🔥 X conversion event fired: tw-r1bmm-r4i67');
+          console.log('✅ X custom event tracked: tw-r1bmm-r4i67');
+          */
+          
+        } catch (error) {
+          console.error('❌ X tracking error:', error);
         }
-      }, 500); // Délai pour assurer que le script est chargé
-    }
+      } else {
+        console.warn('⚠️ X Pixel not loaded - check layout.jsx installation');
+      }
+    };
+
+    // Délai pour assurer que pixel est chargé
+    const timer = setTimeout(trackPageView, 1000);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   if (!mounted) {
