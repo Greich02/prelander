@@ -40,6 +40,33 @@ export default function ResultsPage() {
         window.twq('track', 'PageView');
         console.log('📱 X (Twitter) tracking initialized');
       }
+
+      // ═══════════════════════════════════════════════════════
+      // 🔥 X (Twitter) Conversion Event
+      // ═══════════════════════════════════════════════════════
+      // Fire conversion event when user reaches results page
+      setTimeout(() => {
+        if (window.twq) {
+          window.twq('event', 'tw-r1bmm-r4i67', {
+            value: null,
+            currency: null,
+            contents: [
+              {
+                content_type: null,
+                content_id: null,
+                content_name: null,
+                content_price: null,
+                num_items: null,
+                content_group_id: null
+              }
+            ],
+            conversion_id: null,
+            email_address: null,
+            phone_number: null
+          });
+          console.log('🔥 X conversion event fired: tw-r1bmm-r4i67');
+        }
+      }, 500); // Délai pour assurer que le script est chargé
     }
   }, []);
 
