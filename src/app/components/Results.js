@@ -10,17 +10,73 @@ export default function Results({ isVisible, onCTAClick }) {
   const [userName, setUserName] = useState('');
   const [vitalityScore, setVitalityScore] = useState(null);
   const [userInsights, setUserInsights] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(null); // Synchronisé avec Hero
+  const [timeLeft, setTimeLeft] = useState(null);
   const [resultsStartTime] = useState(Date.now());
   const [userPattern, setUserPattern] = useState('Unknown');
   const sectionRef = useRef(null);
   const analytics = getAnalytics();
   
-  // Constantes de synchronisation avec Hero
   const TIMER_STORAGE_KEY = 'pineal_timer_data';
   const SPOTS_STORAGE_KEY = 'pineal_spots_left';
 
-  // NOUVEAU : Synchroniser avec le timer de la Hero
+  // ============================================================
+  // SCORING SYSTEM v4 — NOUVELLE PONDÉRATION 18/14/10/4
+  // ============================================================
+  const MAX_RAW_SCORE = 90; // 5 questions × 18 points max
+  const MIN_RAW_SCORE = 20;  // 5 questions × 4 points min
+  const SCORE_CAP = 85;
+
+  const calculateScorePercentage = (rawScore) => {
+    const normalized = Math.max(0, (rawScore - MIN_RAW_SCORE) / (MAX_RAW_SCORE - MIN_RAW_SCORE));
+    const curved = Math.pow(normalized, 1.2);
+    return Math.min(Math.round(curved * 100), SCORE_CAP);
+  };
+
+  // QUESTIONS AVEC NOUVELLES VALEURS (18/14/10/4)
+  const questions = [
+    {
+      "options": [
+        { "text": "Deeply connected and energized", "value": 18 },
+        { "text": "Searching for that spark", "value": 14 },
+        { "text": "Feeling disconnected from my true energy", "value": 10 },
+        { "text": "My energy varies unpredictably", "value": 4 }
+      ]
+    },
+    {
+      "options": [
+        { "text": "Rarely - I feel aligned", "value": 18 },
+        { "text": "Sometimes - I notice the gap", "value": 14 },
+        { "text": "Often - It's frustrating", "value": 10 },
+        { "text": "Always - This defines my experience", "value": 4 }
+      ]
+    },
+    {
+      "options": [
+        { "text": "Most days - Clarity is my baseline", "value": 18 },
+        { "text": "Some days - It comes and goes", "value": 14 },
+        { "text": "Rarely - Brain fog is common", "value": 10 },
+        { "text": "Unpredictably - Focus shifts constantly", "value": 4 }
+      ]
+    },
+    {
+      "options": [
+        { "text": "No - I feel the same or better", "value": 18 },
+        { "text": "Slightly - Small changes I've noticed", "value": 14 },
+        { "text": "Yes - The difference is clear", "value": 10 },
+        { "text": "Dramatically - I feel much older", "value": 4 }
+      ]
+    },
+    {
+      "options": [
+        { "text": "Yes - I've always known this", "value": 18 },
+        { "text": "I suspect it - But I can't prove it", "value": 14 },
+        { "text": "Maybe - I'm curious to learn more", "value": 10 },
+        { "text": "I'm not sure - This is new to me", "value": 4 }
+      ]
+    }
+  ];
+
+  // Timer sync
   useEffect(() => {
     const updateTimerFromStorage = () => {
       if (typeof window === 'undefined') return;
@@ -36,24 +92,15 @@ export default function Results({ isVisible, onCTAClick }) {
           setTimeLeft(0);
         }
       } else {
-        // Si pas de timer dans le localStorage, utiliser une valeur par défaut
         setTimeLeft(15 * 60);
       }
     };
 
-    // Mettre à jour immédiatement
     updateTimerFromStorage();
-
-    // S'abonner aux changements de localStorage
     const handleStorageChange = (e) => {
-      if (e.key === TIMER_STORAGE_KEY) {
-        updateTimerFromStorage();
-      }
+      if (e.key === TIMER_STORAGE_KEY) updateTimerFromStorage();
     };
-
     window.addEventListener('storage', handleStorageChange);
-
-    // Timer pour mettre à jour toutes les secondes
     const timer = setInterval(updateTimerFromStorage, 1000);
 
     return () => {
@@ -70,126 +117,125 @@ export default function Results({ isVisible, onCTAClick }) {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
   
-  // Charger les résultats du quiz et calculer le score
+  // ============================================================
+  // 🔥 CHARGEMENT DU SCORE — NOUVELLE PONDÉRATION 18/14/10/4
+  // ============================================================
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      console.log('🔍 === DÉBUT CHARGEMENT SCORE RESULTS ===');
+      
       const results = JSON.parse(localStorage.getItem('quizResults') || '{}');
-      const storedPattern = localStorage.getItem('analytics_user_pattern') || 'Unknown';
-      setUserPattern(storedPattern);
+      console.log('📦 quizResults brut:', results);
       
-      const answers = results.answers || {};
-      
-      // Calculer le score de vitalité basé sur les réponses
-      let totalScore = 0;
-      let answeredQuestions = 0;
-      
-      Object.keys(answers).forEach(qIndex => {
-        const question = questions[parseInt(qIndex)];
-        if (question) {
-          const selectedOption = question.options.find(opt => opt.text === answers[qIndex]);
-          if (selectedOption?.value) {
-            totalScore += selectedOption.value;
-            answeredQuestions++;
+      // ✅ PRIORITÉ ABSOLUE : Score de QuizStepper
+      if (results.scorePercentage !== undefined && results.scorePercentage !== null) {
+        setVitalityScore(results.scorePercentage);
+        setUserPattern(results.userPattern || 'Unknown');
+        
+        console.log('✅ ===== SCORE CHARGÉ DEPUIS QUIZSTEPPER =====');
+        console.log('✅ Score affiché:', results.scorePercentage + '%');
+        console.log('✅ Pattern:', results.userPattern);
+        console.log('✅ Score brut:', results.totalScore, '/', MAX_RAW_SCORE);
+        console.log('✅ ============================================');
+      } 
+      // ⚠️ FALLBACK : Recalcul si QuizStepper n'a pas sauvegardé
+      else {
+        console.warn('⚠️ PAS DE SCORE DANS QUIZSTEPPER - RECALCUL FALLBACK');
+        
+        const answers = results.answers || {};
+        let totalRawScore = 0;
+        let questionsAnswered = 0;
+        
+        console.log('📝 Réponses stockées:', answers);
+        
+        Object.keys(answers).forEach(qIndex => {
+          const question = questions[parseInt(qIndex)];
+          if (question) {
+            const selectedOption = question.options.find(opt => opt.text === answers[qIndex]);
+            if (selectedOption?.value) {
+              totalRawScore += selectedOption.value;
+              questionsAnswered++;
+              console.log(`Q${qIndex}: "${answers[qIndex]}" = ${selectedOption.value} pts`);
+            }
           }
+        });
+        
+        console.log('📊 Total brut:', totalRawScore, '/', MAX_RAW_SCORE);
+        console.log('📊 Questions répondues:', questionsAnswered, '/5');
+        
+        // Appliquer la courbe v4
+        const scorePercentage = calculateScorePercentage(totalRawScore);
+        setVitalityScore(scorePercentage);
+        
+        // Déterminer le pattern
+        let pattern = 'Unknown';
+        if (scorePercentage <= 25) {
+          pattern = 'The Disconnected Seeker';
+        } else if (scorePercentage <= 45) {
+          pattern = 'The Fluctuating Spirit';
+        } else if (scorePercentage <= 65) {
+          pattern = 'The Awakening Guardian';
+        } else {
+          pattern = 'The Aligned Luminary';
         }
-      });
+        setUserPattern(pattern);
+        
+        console.log('⚠️ ===== SCORE RECALCULÉ (FALLBACK) =====');
+        console.log('⚠️ Score affiché:', scorePercentage + '%');
+        console.log('⚠️ Pattern:', pattern);
+        console.log('⚠️ Score brut:', totalRawScore, '/', MAX_RAW_SCORE);
+        console.log('⚠️ ======================================');
+      }
       
-      // Convertir en pourcentage (max 4 points par question)
-      const maxPossible = answeredQuestions * 4;
-      const scorePercentage = maxPossible > 0 ? Math.round((totalScore / maxPossible) * 100) : 40;
+      // Générer insights
+      if (vitalityScore !== null) {
+        generatePersonalizedInsights(vitalityScore);
+      }
       
-      setVitalityScore(scorePercentage);
-      
-      // Tracker la page de résultats
-      analytics.track(EVENTS.RESULTS_VIEW, {
-        vitalityScore: scorePercentage,
-        userPattern: storedPattern,
-        timestamp: new Date().toISOString(),
-        timerRemaining: timeLeft
-      });
-      
-      // Générer des insights personnalisés basés sur le score
-      generatePersonalizedInsights(scorePercentage, answers);
-      
-      // Simuler un nom d'utilisateur
+      // Nom utilisateur
       const names = ['Spiritual Seeker', 'Energy Explorer', 'Vitality Seeker', 'Awakening Soul'];
       setUserName(names[Math.floor(Math.random() * names.length)]);
+      
+      console.log('🔍 === FIN CHARGEMENT SCORE RESULTS ===');
     }
   }, [timeLeft]);
-  
-  const questions = [
-    {
-      "options": [
-        { "text": "Deeply connected and energized", "value": 4 },
-        { "text": "Searching for that spark", "value": 3 },
-        { "text": "Feeling disconnected from my true energy", "value": 2 },
-        { "text": "My energy varies unpredictably", "value": 1 }
-      ]
-    },
-    {
-      "options": [
-        { "text": "Rarely - I feel aligned", "value": 4 },
-        { "text": "Sometimes - I notice the gap", "value": 3 },
-        { "text": "Often - It's frustrating", "value": 2 },
-        { "text": "Always - This defines my experience", "value": 1 }
-      ]
-    },
-    {
-      "options": [
-        { "text": "Most days - Clarity is my baseline", "value": 4 },
-        { "text": "Some days - It comes and goes", "value": 3 },
-        { "text": "Rarely - Brain fog is common", "value": 2 },
-        { "text": "Unpredictably - Focus shifts constantly", "value": 1 }
-      ]
-    },
-    {
-      "options": [
-        { "text": "No - I feel the same or better", "value": 4 },
-        { "text": "Slightly - Small changes I've noticed", "value": 3 },
-        { "text": "Yes - The difference is clear", "value": 2 },
-        { "text": "Dramatically - I feel much older", "value": 1 }
-      ]
-    },
-    {
-      "options": [
-        { "text": "Yes - I've always known this", "value": 4 },
-        { "text": "I suspect it - But I can't prove it", "value": 3 },
-        { "text": "Maybe - I'm curious to learn more", "value": 2 },
-        { "text": "I'm not sure - This is new to me", "value": 1 }
-      ]
-    }
-  ];
 
-  const generatePersonalizedInsights = (score, answers) => {
+  const generatePersonalizedInsights = (score) => {
     let insights = [];
     
-    if (score <= 40) {
+    if (score <= 25) {
       insights = [
         "Your pineal gland shows signs of significant calcification (60-70% blocked), creating the disconnection you're experiencing",
         "The gap between your youthful spirit and aging body points directly to disrupted pineal function",
         "Conventional approaches have failed because they don't address pineal decalcification",
         "With proper pineal support, people with your score typically see 40% energy improvement within 14 days"
       ];
-    } else if (score <= 70) {
+    } else if (score <= 45) {
       insights = [
         "Your pineal gland is moderately calcified (30-50%), causing the energy fluctuations you notice",
         "The 'brain fog' you experience is a classic sign of partial pineal blockage",
         "Your body is showing early-stage spiritual aging that's completely reversible",
         "People with your pattern respond exceptionally well to pineal decalcification (87% success rate)"
       ];
+    } else if (score <= 65) {
+      insights = [
+        "Your pineal gland has mild calcification but specific blockages are limiting your full potential",
+        "You're experiencing what researchers call 'subclinical pineal dysfunction'",
+        "Small optimizations to your pineal health could unlock significant vitality gains",
+        "You're in the top 10% of spiritual wellness seekers - perfect foundation for breakthrough"
+      ];
     } else {
       insights = [
-        "Your pineal gland has minimal calcification but specific blockages are limiting your full potential",
-        "You're experiencing what researchers call 'subclinical pineal dysfunction'",
-        "Small optimizations to your pineal health could unlock 200% more vitality",
-        "You're in the top 15% of spiritual wellness seekers - perfect foundation for breakthrough"
+        "Your pineal gland is functioning at an exceptionally high level",
+        "You're maintaining optimal spiritual-biological alignment",
+        "Fine-tuning your pineal health could unlock the remaining 15% to reach peak vitality",
+        "You're in the top 2% - maintenance and protection are your focus areas"
       ];
     }
     
     setUserInsights(insights);
   };
 
-  // Récupérer les spots restants depuis localStorage
   const getSpotsLeft = () => {
     if (typeof window === 'undefined') return 47;
     const savedSpots = localStorage.getItem(SPOTS_STORAGE_KEY);
@@ -198,7 +244,6 @@ export default function Results({ isVisible, onCTAClick }) {
 
   const spotsLeft = getSpotsLeft();
 
-  // Tracking helper pour les CTA
   const trackCTAClick = (ctaPosition) => {
     const timeOnResults = Date.now() - resultsStartTime;
     
@@ -230,14 +275,12 @@ export default function Results({ isVisible, onCTAClick }) {
 
   const handleSecondaryClick = () => {
     if (confirm("Are you sure? This personalized pineal analysis took advanced algorithms to generate and expires in " + formatTime(timeLeft) + ". You may not get this exact insight again.")) {
-      // Log l'abandon pour analytics
       console.log('User declined offer');
     }
   };
 
   if (!isVisible) return null;
 
-  // Récupérer le nombre de cycles de réinitialisation
   const getTimerCycles = () => {
     if (typeof window === 'undefined') return 0;
     const savedData = localStorage.getItem(TIMER_STORAGE_KEY);
@@ -252,7 +295,6 @@ export default function Results({ isVisible, onCTAClick }) {
 
   const timerCycles = getTimerCycles();
 
-  // Données des témoignages
   const testimonials = [
     {
       id: 1,
@@ -283,27 +325,33 @@ export default function Results({ isVisible, onCTAClick }) {
   ];
 
   const getScoreCategory = (score) => {
-    if (score <= 40) return { 
+    if (score <= 25) return { 
       label: "High Revival Potential", 
       color: "from-rose-400 to-pink-600", 
       icon: <Zap className="w-5 h-5" />,
       pattern: "The Disconnected Seeker"
     };
-    if (score <= 70) return { 
+    if (score <= 45) return { 
       label: "Moderate Pineal Blockage", 
       color: "from-amber-400 to-orange-500", 
       icon: <Target className="w-5 h-5" />,
       pattern: "The Fluctuating Spirit"
     };
-    return { 
+    if (score <= 65) return { 
       label: "Strong Foundation", 
       color: "from-emerald-400 to-teal-600", 
       icon: <Sparkles className="w-5 h-5" />,
       pattern: "The Awakening Guardian"
     };
+    return { 
+      label: "Exceptional Vitality", 
+      color: "from-blue-400 to-indigo-600", 
+      icon: <Award className="w-5 h-5" />,
+      pattern: "The Aligned Luminary"
+    };
   };
 
-  const scoreCategory = vitalityScore ? getScoreCategory(vitalityScore) : null;
+  const scoreCategory = vitalityScore !== null ? getScoreCategory(vitalityScore) : null;
 
   return (
     <>
@@ -319,23 +367,17 @@ export default function Results({ isVisible, onCTAClick }) {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="bg-gradient-to-br from-white to-amber-50/30 rounded-2xl p-6 md:p-10 shadow-2xl shadow-amber-900/5 border border-amber-200 relative overflow-hidden"
         >
-          {/* Éléments décoratifs */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-200/20 to-purple-200/10 rounded-full -translate-y-16 translate-x-16"></div>
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-br from-emerald-200/10 to-teal-200/10 rounded-full translate-y-12 -translate-x-12"></div>
 
-          {/* TIMER COUNTDOWN SYNCHRONISÉ */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6 relative z-10"
           >
-            {/* Badge du timer */}
             <div className="inline-flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-rose-50 to-pink-50 rounded-xl border-2 border-rose-300 shadow-lg relative">
-              <motion.div
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
+              <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }}>
                 <Clock className="w-6 h-6 text-rose-600" />
               </motion.div>
               <div className="text-left">
@@ -353,7 +395,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </div>
 
-            {/* Badge des spots */}
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-100 to-amber-50/50 rounded-full border border-amber-300">
               <Users className="w-4 h-4 text-amber-600" />
               <span className="text-sm font-semibold text-amber-800">
@@ -362,7 +403,6 @@ export default function Results({ isVisible, onCTAClick }) {
             </div>
           </motion.div>
 
-          {/* TITRE PRINCIPAL */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -379,8 +419,8 @@ export default function Results({ isVisible, onCTAClick }) {
             </p>
           </motion.div>
 
-          {/* SCORE DE VITALITÉ */}
-          {vitalityScore && (
+          {/* 🔥 SCORE DE VITALITÉ — NOUVELLE PONDÉRATION 18/14/10/4 */}
+          {vitalityScore !== null && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -395,7 +435,6 @@ export default function Results({ isVisible, onCTAClick }) {
                   <p className="text-gray-600">Indicates level of pineal gland calcification</p>
                 </div>
                 
-                {/* Cercle de score animé */}
                 <div className="flex justify-center mb-6">
                   <div className="relative w-48 h-48">
                     <svg className="w-full h-full transform -rotate-90">
@@ -421,11 +460,16 @@ export default function Results({ isVisible, onCTAClick }) {
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ duration: 0.5, delay: 0.8 }}
-                        className="text-5xl font-bold bg-gradient-to-br from-amber-600 to-pink-600 bg-clip-text text-transparent"
+                        className="flex items-center justify-center gap-1"
                       >
-                        {vitalityScore}
+                        <span className="text-5xl font-bold bg-gradient-to-br from-amber-600 to-pink-600 bg-clip-text text-transparent">
+                          {vitalityScore}
+                        </span>
+                        <span className="text-5xl font-bold bg-gradient-to-br from-amber-600 to-pink-600 bg-clip-text text-transparent">
+                          %
+                        </span>
                       </motion.div>
-                      <div className="text-lg font-semibold text-gray-700">/100</div>
+                      
                       {scoreCategory && (
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
@@ -441,19 +485,20 @@ export default function Results({ isVisible, onCTAClick }) {
                   </div>
                 </div>
                 
-                <div className="text-center max-w-md mx-auto">
+                {/* 🔥 MESSAGES ADAPTÉS AUX NOUVEAUX SEUILS AVEC INTERPRÉTATIONS RÉALISTES */}
+                <div className="text-center max-w-full w-full mx-auto">
                   <p className="text-gray-700 mb-4">
                     <span className="font-semibold text-gray-900">What this means:</span>{" "}
-                    Your score of {vitalityScore}/100 indicates{" "}
-                    {vitalityScore <= 40 ? "significant pineal calcification (60-70% blocked) causing accelerated spiritual aging" :
-                     vitalityScore <= 70 ? "moderate pineal blockage (30-50%) creating the energy fluctuations you're experiencing" :
-                     "minimal calcification with specific pineal optimization opportunities for breakthrough vitality"}.
+                    Your score of {vitalityScore}% indicates{" "}
+                    {vitalityScore <= 25 ? "significant pineal calcification (60-70% blocked). Your 'disconnected seeker' pattern is common among those with high spiritual awareness but blocked biological receptors. The gap between your inner youth and outer aging is a direct result of this calcification." :
+                    vitalityScore <= 45 ? "moderate pineal blockage (30-50%). Your 'fluctuating spirit' pattern explains why your energy comes in waves. You have good days and bad days because your pineal gland is partially blocked—sometimes signals get through, sometimes they don't." :
+                    vitalityScore <= 65 ? "mild calcification with specific blockages limiting your full potential. Your 'awakening guardian' pattern shows you've maintained decent pineal health, but targeted blockages are preventing the breakthrough vitality you're capable of." :
+                    "exceptional pineal function with minimal calcification. Your 'aligned luminary' pattern puts you in the top 8% of the population. You're not here to fix major issues—you're here to unlock the final 15% to reach peak spiritual-biological alignment."}
                   </p>
                 </div>
               </div>
             </motion.div>
           )}
-
           {/* SECTION RÉVÉLATION PINÉALE */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -461,7 +506,6 @@ export default function Results({ isVisible, onCTAClick }) {
             transition={{ duration: 0.6, delay: 0.7 }}
             className="mb-10 relative z-10"
           >
-            {/* EN-TÊTE SECTION */}
             <div className="text-center mb-8">
               <motion.div
                 initial={{ scale: 0 }}
@@ -488,7 +532,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 <div className="w-20 h-1 bg-gradient-to-r from-purple-400 to-pink-400 mx-auto mb-6"></div>
               </div>
 
-              {/* PINEAL GLAND IMAGE */}
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -507,7 +550,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </motion.div>
 
-              {/* TIMER URGENCE APRÈS L'IMAGE */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -530,9 +572,7 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </motion.div>
 
-              {/* EXPLICATION 2 COLONNES */}
               <div className="grid md:grid-cols-2 gap-6 mb-6">
-                {/* Colonne 1 : Ancient Wisdom */}
                 <div className="bg-white/60 rounded-xl p-6 border border-purple-200">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
@@ -548,7 +588,6 @@ export default function Results({ isVisible, onCTAClick }) {
                   </p>
                 </div>
 
-                {/* Colonne 2 : Modern Science */}
                 <div className="bg-white/60 rounded-xl p-6 border border-purple-200">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
@@ -565,7 +604,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </div>
 
-              {/* LE PROBLÈME */}
               <div className="bg-gradient-to-r from-rose-100 to-pink-100 rounded-xl p-6 border-l-4 border-rose-500 mb-6">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-6 h-6 text-rose-600 flex-shrink-0 mt-1" />
@@ -581,7 +619,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </div>
 
-              {/* SYMPTÔMES PERSONNALISÉS */}
               <div className="grid md:grid-cols-2 gap-4 mb-6">
                 <div className="flex items-start gap-3 bg-white/60 rounded-lg p-4 border border-gray-200">
                   <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -609,7 +646,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </div>
 
-              {/* LA BONNE NOUVELLE */}
               <div className="bg-gradient-to-r from-emerald-100 to-teal-100 rounded-xl p-6 border-l-4 border-emerald-500">
                 <div className="flex items-start gap-3">
                   <CheckCircle className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-1" />
@@ -623,7 +659,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </div>
 
-            {/* CTA #1 - APRÈS RÉVÉLATION */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -653,7 +688,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </motion.div>
 
-            {/* LA DÉCOUVERTE SCIENTIFIQUE */}
             <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-8 border-2 border-blue-200 mb-8">
               <div className="text-center mb-6">
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-4">
@@ -689,7 +723,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </div>
 
-              {/* RÉSULTATS RAPPORTÉS */}
               <div className="bg-gradient-to-r from-amber-50 to-orange-50/30 rounded-xl p-6 border border-amber-200">
                 <h5 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-amber-600" />
@@ -716,7 +749,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </div>
 
-            {/* CTA #2 - APRÈS 9 COMPOUNDS */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -794,6 +826,9 @@ export default function Results({ isVisible, onCTAClick }) {
             </div>
           </motion.div>
 
+          {/* Reste du JSX identique - témoignages, Genesis Revival, objections, CTA final, etc. */}
+          {/* Pour économiser des tokens, je coupe ici mais dans le fichier final, tout le JSX reste */}
+          
           {/* SOCIAL PROOF - TÉMOIGNAGES */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -840,7 +875,6 @@ export default function Results({ isVisible, onCTAClick }) {
                     "{testimonial.text}"
                   </p>
                   
-                  {/* Score avant/après */}
                   <div className="space-y-3">
                     <div>
                       <div className="flex items-center justify-between text-xs mb-1">
@@ -873,7 +907,6 @@ export default function Results({ isVisible, onCTAClick }) {
               ))}
             </div>
 
-            {/* Social Proof Stats */}
             <div className="bg-gradient-to-r from-amber-50 to-orange-50/30 rounded-xl p-5 border border-amber-200">
               <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
                 <div>
@@ -891,7 +924,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </div>
 
-            {/* CTA #3 - APRÈS TÉMOIGNAGES */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -945,7 +977,6 @@ export default function Results({ isVisible, onCTAClick }) {
                   <Sparkles className="w-8 h-8 text-white" />
                 </motion.div>
 
-                {/* PRODUCT IMAGE */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -967,7 +998,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </p>
               </div>
 
-              {/* CE QUE VOUS OBTENEZ */}
               <div className="grid md:grid-cols-2 gap-6 mb-8">
                 <div className="bg-white/80 rounded-xl p-6 border border-purple-200">
                   <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -1016,7 +1046,6 @@ export default function Results({ isVisible, onCTAClick }) {
                 </div>
               </div>
 
-              {/* POURQUOI C'EST DIFFÉRENT */}
               <div className="bg-gradient-to-r from-emerald-100 to-teal-100 rounded-xl p-6 border-l-4 border-emerald-500 mb-6">
                 <h4 className="font-bold text-gray-900 mb-3">This Isn't Like Other Supplements:</h4>
                 <div className="space-y-2 text-sm text-gray-700">
@@ -1106,7 +1135,6 @@ export default function Results({ isVisible, onCTAClick }) {
             transition={{ duration: 0.6, delay: 1.7 }}
             className="mb-8 relative z-10"
           >
-            {/* TIMER URGENCE */}
             <div className="bg-gradient-to-r from-rose-100 via-pink-100 to-orange-100 rounded-xl p-6 border-2 border-rose-300 mb-6">
               <div className="text-center">
                 <div className="flex items-center justify-center gap-2 mb-3">
@@ -1133,7 +1161,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </div>
 
-            {/* WHAT HAPPENS NEXT */}
             <div className="bg-gradient-to-br from-amber-50 to-orange-50/30 rounded-xl p-6 border border-amber-200 mb-6">
               <h4 className="font-bold text-gray-900 mb-4 text-center">Here's What Happens Next:</h4>
               <div className="grid md:grid-cols-4 gap-4 text-center">
@@ -1174,7 +1201,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </span>
             </motion.button>
 
-            {/* Garanties sous le bouton */}
             <div className="grid grid-cols-3 gap-4 text-center text-sm">
               <div className="flex flex-col items-center gap-1">
                 <Shield className="w-5 h-5 text-emerald-500" />
@@ -1190,7 +1216,6 @@ export default function Results({ isVisible, onCTAClick }) {
               </div>
             </div>
 
-            {/* CTA SECONDAIRE */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
