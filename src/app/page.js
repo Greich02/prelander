@@ -18,7 +18,6 @@ export default function Home() {
         {/* Quiz Section - No gap, immediately visible 
         <QuizStepper /> */}
       </main>
-      <ExitPopup />
     </div>
   );
 }

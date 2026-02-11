@@ -1,234 +1,260 @@
+import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
-import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 
-// Configuration Email
-const EMAIL_CONFIG = {
-  service: 'gmail',
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER || 'test@gmail.com',
-    pass: process.env.EMAIL_PASSWORD || 'test-password'
-  }
-};
-
-console.log('📧 Email Config:', {
-  host: EMAIL_CONFIG.host,
-  user: EMAIL_CONFIG.auth.user,
-  password: EMAIL_CONFIG.auth.pass ? '***hidden***' : 'NOT SET'
-});
-
-// Créer le transport nodemailer
-let transporter;
-try {
-  transporter = nodemailer.createTransport(EMAIL_CONFIG);
-} catch (err) {
-  console.error('❌ Erreur création transporter:', err);
-}
-
-// Fonction pour sauvegarder l'email dans emails.json
-function saveEmailToFile(email, userData) {
-  try {
-    const dataDir = path.join(process.cwd(), 'data');
-    const emailsFile = path.join(dataDir, 'emails.json');
-
-    // Créer le dossier s'il n'existe pas
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-
-    // Lire ou initialiser le fichier
-    let emails = [];
-    if (fs.existsSync(emailsFile)) {
-      const fileContent = fs.readFileSync(emailsFile, 'utf-8');
-      if (fileContent.trim()) {
-        try {
-          emails = JSON.parse(fileContent);
-        } catch (e) {
-          console.warn('⚠️ JSON invalide dans emails.json, reset à []');
-          emails = [];
-        }
-      }
-    }
-
-    // Ajouter la nouvelle entrée
-    const newEntry = {
-      id: Date.now(),
-      email: email,
-      userPattern: userData.userPattern,
-      vitalityScore: userData.vitalityScore,
-      context: userData.context,
-      submittedAt: new Date().toISOString(),
-      emailSent: userData.emailSent || false,
-      source: 'exit_popup'
-    };
-
-    emails.push(newEntry);
-
-    // Sauvegarder
-    fs.writeFileSync(emailsFile, JSON.stringify(emails, null, 2));
-    console.log(`✅ Email sauvegardé dans ${emailsFile}: ${email}`);
-    return true;
-  } catch (error) {
-    console.error('❌ Erreur lors de la sauvegarde du fichier:', error);
-    return false;
-  }
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { email, userPattern, vitalityScore, userContext } = body;
+    const { email, vitalityScore, userPattern } = body;
 
-    // Validation
-    if (!email || !email.includes('@')) {
+    if (!email) {
       return NextResponse.json(
-        { success: false, message: 'Email invalide' },
+        { error: 'Email is required' },
         { status: 400 }
       );
     }
 
-    console.log(`📨 Traitement email: ${email}`);
+    // Lire le PDF depuis le dossier public
+    const pdfPath = path.join(process.cwd(), 'public', '9-Pineal-Foods-Guide.pdf');
+    let pdfBuffer = null;
+    
+    try {
+      pdfBuffer = fs.readFileSync(pdfPath);
+      console.log('✅ PDF loaded successfully:', pdfBuffer.length, 'bytes');
+    } catch (pdfError) {
+      console.error('⚠️ PDF not found, will send email without attachment:', pdfError.message);
+    }
 
-    // ═════════════════════════════════════════════════════════
-    // ÉTAPE 1: SAUVEGARDER IMMÉDIATEMENT (avant envoi)
-    // ═════════════════════════════════════════════════════════
-    const savedToFile = saveEmailToFile(email, {
-      userPattern,
-      vitalityScore,
-      context: userContext,
-      emailSent: false // On marque comme non envoyé pour l'instant
+    // Préparer les attachments
+    const attachments = pdfBuffer ? [{
+      filename: '9-Pineal-Foods-Guide.pdf',
+      content: pdfBuffer,
+    }] : [];
+
+    // Envoyer l'email via Resend
+    const data = await resend.emails.send({
+      from: 'Mind-Body Wellness <contact@mind-body.fit>',
+      to: [email],
+      subject: `Your Personalized Wellness Guide - Score: ${vitalityScore || 'N/A'}/100`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Your Wellness Guide</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f7f7f7; font-family: Arial, Helvetica, sans-serif;">
+          <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f7f7f7;">
+            <tr>
+              <td align="center" style="padding: 40px 20px;">
+                
+                <!-- Main Container -->
+                <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                  
+                  <!-- Header -->
+                  <tr>
+                    <td style="padding: 40px 40px 30px; text-align: center; background: linear-gradient(135deg, #7C3AED 0%, #EC4899 100%);">
+                      <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.3;">
+                        Your Wellness Assessment Results
+                      </h1>
+                      <p style="margin: 12px 0 0; color: #ffffff; font-size: 16px; opacity: 0.95;">
+                        ${userPattern || 'Wellness Seeker'}
+                      </p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Score Badge -->
+                  <tr>
+                    <td style="padding: 0 40px;">
+                      <div style="margin-top: -25px; text-align: center;">
+                        <div style="display: inline-block; background-color: #ffffff; border-radius: 50px; padding: 12px 28px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                          <span style="color: #4a5568; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Vitality Score</span>
+                          <span style="margin: 0 8px; color: #F59E0B; font-size: 24px; font-weight: 700;">${vitalityScore || 'N/A'}</span>
+                          <span style="color: #9ca3af; font-size: 16px;">/100</span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  
+                  <!-- Main Content -->
+                  <tr>
+                    <td style="padding: 40px 40px 30px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                      <p style="margin: 0 0 20px;">Hello,</p>
+                      
+                      <p style="margin: 0 0 20px;">
+                        Thank you for completing your wellness assessment. Based on your results, we have prepared a personalized guide to support your vitality journey.
+                      </p>
+                      
+                      <p style="margin: 0 0 24px; padding: 20px; background-color: #FEF3C7; border-left: 4px solid #F59E0B; border-radius: 4px; color: #78350F; font-size: 15px;">
+                        <strong style="color: #78350F;">📎 Attached:</strong> Your complete "9 Foods Guide" with detailed protocols, meal plans, and shopping lists customized for your wellness pattern.
+                      </p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Quick Preview -->
+                  <tr>
+                    <td style="padding: 0 40px 30px;">
+                      <h2 style="margin: 0 0 16px; color: #1f2937; font-size: 20px; font-weight: 700;">
+                        What's Inside Your Guide:
+                      </h2>
+                      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                            <span style="color: #7C3AED; font-weight: 600;">✓</span>
+                            <span style="margin-left: 12px; color: #4a5568;">The 9 scientifically-backed foods for vitality</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                            <span style="color: #7C3AED; font-weight: 600;">✓</span>
+                            <span style="margin-left: 12px; color: #4a5568;">Exact daily dosages and consumption methods</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                            <span style="color: #7C3AED; font-weight: 600;">✓</span>
+                            <span style="margin-left: 12px; color: #4a5568;">7-day meal plan with shopping list</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                            <span style="color: #7C3AED; font-weight: 600;">✓</span>
+                            <span style="margin-left: 12px; color: #4a5568;">90-day wellness timeline and expectations</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 10px 0;">
+                            <span style="color: #7C3AED; font-weight: 600;">✓</span>
+                            <span style="margin-left: 12px; color: #4a5568;">Foods to avoid and why</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  
+                  <!-- Next Step -->
+                  <tr>
+                    <td style="padding: 0 40px 40px;">
+                      <div style="background: linear-gradient(135deg, #DBEAFE 0%, #E0E7FF 100%); border-radius: 8px; padding: 24px; text-align: center;">
+                        <h3 style="margin: 0 0 12px; color: #1e40af; font-size: 18px; font-weight: 700;">
+                          🚀 Ready to Start?
+                        </h3>
+                        <p style="margin: 0 0 16px; color: #1e3a8a; font-size: 15px; line-height: 1.5;">
+                          Open the attached guide and begin with Foods #2 (Chlorophyll) and #5 (Cilantro) this week for fastest results.
+                        </p>
+                        <p style="margin: 0; color: #4338ca; font-size: 14px; font-style: italic;">
+                          Most people notice energy shifts within 7-14 days.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                  
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding: 30px 40px; background-color: #f9fafb; border-top: 1px solid #e5e7eb;">
+                      <p style="margin: 0 0 16px; color: #4a5568; font-size: 15px;">
+                        Questions? Simply reply to this email - we read every message.
+                      </p>
+                      <p style="margin: 0; color: #1f2937; font-size: 16px; font-weight: 600;">
+                        To your vitality,<br>
+                        <span style="color: #7C3AED;">The Mind-Body Team</span>
+                      </p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Legal Footer -->
+                  <tr>
+                    <td style="padding: 20px 40px; background-color: #f3f4f6; text-align: center;">
+                      <p style="margin: 0 0 8px; color: #9ca3af; font-size: 12px; line-height: 1.5;">
+                        Mind-Body Wellness | contact@mind-body.fit
+                      </p>
+                      <p style="margin: 0; color: #9ca3af; font-size: 11px; line-height: 1.4;">
+                        This guide is for educational purposes only and does not constitute medical advice.<br>
+                        Consult with a healthcare provider before making dietary changes.
+                      </p>
+                    </td>
+                  </tr>
+                  
+                </table>
+                
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `YOUR WELLNESS ASSESSMENT RESULTS
+
+Hello,
+
+Thank you for completing your wellness assessment.
+
+VITALITY SCORE: ${vitalityScore || 'N/A'}/100
+PATTERN: ${userPattern || 'Wellness Seeker'}
+
+ATTACHED: Your personalized "9 Foods Guide" (PDF)
+
+What's Inside:
+- The 9 scientifically-backed foods for vitality
+- Exact daily dosages and consumption methods  
+- 7-day meal plan with shopping list
+- 90-day wellness timeline
+- Foods to avoid and why
+
+NEXT STEP: Open the attached guide and begin with Foods #2 (Chlorophyll) and #5 (Cilantro) this week for fastest results.
+
+Most people notice energy shifts within 7-14 days.
+
+Questions? Simply reply to this email.
+
+To your vitality,
+The Mind-Body Team
+
+---
+Mind-Body Wellness | contact@mind-body.fit
+This guide is for educational purposes only and does not constitute medical advice.`,
+      attachments: attachments
     });
 
-    if (!savedToFile) {
-      console.warn('⚠️ Impossible de sauvegarder le fichier');
+    console.log('✅ Email sent successfully:', data);
+
+    // Sauvegarder dans le fichier JSON local (optionnel)
+    const emailData = {
+      email,
+      vitalityScore,
+      userPattern,
+      timestamp: new Date().toISOString(),
+      emailId: data.id
+    };
+
+    const emailsFilePath = path.join(process.cwd(), 'emails.json');
+    let emailsArray = [];
+    
+    if (fs.existsSync(emailsFilePath)) {
+      const fileContent = fs.readFileSync(emailsFilePath, 'utf-8');
+      emailsArray = JSON.parse(fileContent);
     }
+    
+    emailsArray.push(emailData);
+    fs.writeFileSync(emailsFilePath, JSON.stringify(emailsArray, null, 2));
 
-    // ═════════════════════════════════════════════════════════
-    // ÉTAPE 2: ESSAYER D'ENVOYER L'EMAIL (optionnel)
-    // ═════════════════════════════════════════════════════════
-    let emailSent = false;
-    let emailError = null;
-
-    if (!transporter) {
-      console.warn('⚠️ Transporter non initialisé, skip envoi email');
-      emailError = 'Transporter not initialized';
-    } else {
-      try {
-        // Configuration du mail
-        const mailOptions = {
-          from: process.env.EMAIL_USER || 'noreply@prelander.com',
-          to: email,
-          subject: '🎯 Your 9 Pineal Foods Guide is Ready!',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; color: white; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1 style="margin: 0; font-size: 28px;">🧠 Welcome to Your Pineal Journey!</h1>
-                <p style="margin: 10px 0 0 0; font-size: 16px;">Your personalized guide is attached</p>
-              </div>
-              
-              <div style="padding: 30px; background: #f8f9fa; border-radius: 0 0 10px 10px;">
-                <p style="font-size: 16px; color: #333;">Hello,</p>
-                
-                <p style="font-size: 15px; color: #555; line-height: 1.6;">
-                  Thank you for taking the Pineal Health Assessment! Based on your results, we've prepared a personalized guide with <strong>9 foods that naturally decalcify your pineal gland</strong>.
-                </p>
-                
-                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-                  <p style="margin: 0; font-size: 14px; color: #333;"><strong>Your Assessment Results:</strong></p>
-                  <ul style="margin: 10px 0; padding-left: 20px;">
-                    <li style="font-size: 14px; color: #555;">User Pattern: <strong>${userPattern}</strong></li>
-                    <li style="font-size: 14px; color: #555;">Vitality Score: <strong>${vitalityScore}/100</strong></li>
-                  </ul>
-                </div>
-                
-                <p style="font-size: 14px; color: #666; margin-top: 20px;">
-                  Questions? Reply to this email and we'll help you on your journey.
-                </p>
-                
-                <p style="font-size: 14px; color: #666; margin: 20px 0 0 0;">
-                  To Your Health,<br>
-                  <strong>The Pineal Health Team</strong>
-                </p>
-              </div>
-            </div>
-          `,
-          attachments: [
-            {
-              filename: '9-Pineal-Foods-Guide.txt',
-              content: `
-🧠 9 FOODS THAT DECALCIFY YOUR PINEAL GLAND
-Complete Guide for Optimal Brain Health
-
-FOODS TO BOOST PINEAL FUNCTION:
-
-1. DARK CHOCOLATE (70% cacao minimum)
-   → Rich in antioxidants that protect the pineal gland
-   → Dosage: 70g per day
-
-2. CHLOROPHYLL (Spirulina, Chlorella)
-   → Naturally purifies the body
-   → Dosage: 1-2g per day
-
-3. IODINE-RICH FOODS (Seaweed, Marine Algae)
-   → Optimal support for pineal function
-   → Dosage: 150mcg per day
-
-Generated: ${new Date().toLocaleDateString()}
-              `
-            }
-          ]
-        };
-
-        console.log('📧 Envoi de l\'email à:', email);
-        await transporter.sendMail(mailOptions);
-        emailSent = true;
-        console.log(`✅ Email envoyé à: ${email}`);
-
-        // Mettre à jour le fichier pour marquer comme envoyé
-        const dataDir = path.join(process.cwd(), 'data');
-        const emailsFile = path.join(dataDir, 'emails.json');
-        if (fs.existsSync(emailsFile)) {
-          const fileContent = fs.readFileSync(emailsFile, 'utf-8');
-          let emails = JSON.parse(fileContent);
-          // Marquer le dernier email comme envoyé
-          if (emails.length > 0) {
-            emails[emails.length - 1].emailSent = true;
-            fs.writeFileSync(emailsFile, JSON.stringify(emails, null, 2));
-          }
-        }
-
-      } catch (smtpError) {
-        emailError = smtpError.message;
-        console.warn(`⚠️ Erreur SMTP (email pas envoyé, mais données sauvegardées):`, smtpError.message);
-        // NE PAS THROW - on continue même si email échoue
-      }
-    }
-
-    // ═════════════════════════════════════════════════════════
-    // ÉTAPE 3: RÉPONDRE AU CLIENT
-    // ═════════════════════════════════════════════════════════
-    return NextResponse.json({
-      success: true, // true parce que les données ont été sauvegardées!
-      message: emailSent 
-        ? 'Email envoyé avec succès et données sauvegardées'
-        : 'Données sauvegardées (email non envoyé - vérifiez .env.local)',
-      emailSent: emailSent,
-      fileSaved: savedToFile,
-      emailError: emailError ? `⚠️ ${emailError}` : null
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Email sent successfully',
+      emailId: data.id,
+      attachmentSent: !!pdfBuffer
     });
 
   } catch (error) {
-    console.error('❌ Erreur lors du traitement:', error);
-    
+    console.error('❌ Error sending email:', error);
     return NextResponse.json(
-      {
-        success: false,
-        message: 'Erreur lors du traitement de la requête',
-        error: error.message
+      { 
+        error: 'Failed to send email', 
+        details: error.message 
       },
       { status: 500 }
     );

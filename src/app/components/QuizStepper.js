@@ -5,6 +5,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Target, Zap, Star, Award, ChevronRight, Clock, Brain, AlertCircle } from 'lucide-react';
 import { getAnalytics, EVENTS } from '@/app/utils/analytics';
 
+// ============================================================
+// SCORING SYSTEM v2 — Asymétrique + Courbe dégressive + Cap 91%
+// ============================================================
+// Philosophie :
+//   - La meilleure réponse (option 1) vaut 10 pts → rare, difficile à accumuler
+//   - Les options intermédiaires valent 4-5 pts → écart massif avec le top
+//   - Les options "problème" valent 1-2 pts → creusent vite le déficit
+//   - Score brut passé dans une courbe x^1.4 qui écrase les moyens vers le bas
+//   - Plafond dur à 91% même si score brut = max
+//
+// Exemples de résultats :
+//   Tout au max (10×5=50)       → 91% (cap)
+//   Profil "bon" (8+8+10+8+8)   → ~74%
+//   Profil mixte (5+4+4+4+4)    → ~28%
+//   Profil moyen (4+4+4+4+4)    → ~24%
+//   Profil bas (2+1+2+1+2)      → ~5%
+//   Tout au min (1+1+1+1+1)     → ~2%
+// ============================================================
+
 const questions = [
   {
     "question": "When you wake up, how connected do you feel to your inner vitality and youthful energy?",
@@ -12,12 +31,12 @@ const questions = [
       { 
         "text": "Deeply connected and energized", 
         "description": "You wake with natural vitality flowing through you",
-        "value": 4
+        "value": 10
       },
       { 
         "text": "Searching for that spark", 
         "description": "You sense the energy is there, just harder to access",
-        "value": 3
+        "value": 5
       },
       { 
         "text": "Feeling disconnected from my true energy", 
@@ -27,7 +46,7 @@ const questions = [
       { 
         "text": "My energy varies unpredictably", 
         "description": "Some mornings feel youthful, others feel aged",
-        "value": 1
+        "value": 3
       }
     ]
   },
@@ -37,12 +56,12 @@ const questions = [
       { 
         "text": "Rarely - I feel aligned", 
         "description": "Your inner age and outer experience are in harmony",
-        "value": 4
+        "value": 10
       },
       { 
         "text": "Sometimes - I notice the gap", 
         "description": "This disconnect appears occasionally",
-        "value": 3
+        "value": 4
       },
       { 
         "text": "Often - It's frustrating", 
@@ -62,22 +81,22 @@ const questions = [
       { 
         "text": "Most days - Clarity is my baseline", 
         "description": "Your mental vitality remains youthful and vibrant",
-        "value": 4
+        "value": 10
       },
       { 
         "text": "Some days - It comes and goes", 
         "description": "Mental clarity fluctuates",
-        "value": 3
+        "value": 4
       },
       { 
         "text": "Rarely - Brain fog is common", 
         "description": "Mental aging is showing up more than you'd like",
-        "value": 2
+        "value": 1
       },
       { 
         "text": "Unpredictably - Focus shifts constantly", 
         "description": "Your cognitive energy feels unstable and aged",
-        "value": 1
+        "value": 2
       }
     ]
   },
@@ -87,12 +106,12 @@ const questions = [
       { 
         "text": "No - I feel the same or better", 
         "description": "You're maintaining or reversing your biological age",
-        "value": 4
+        "value": 10
       },
       { 
         "text": "Slightly - Small changes I've noticed", 
         "description": "Subtle shifts are appearing",
-        "value": 3
+        "value": 4
       },
       { 
         "text": "Yes - The difference is clear", 
@@ -112,12 +131,12 @@ const questions = [
       { 
         "text": "Yes - I've always known this", 
         "description": "You're spiritually aware that aging goes beyond the physical",
-        "value": 4
+        "value": 10
       },
       { 
         "text": "I suspect it - But I can't prove it", 
         "description": "Your intuition is guiding you to something deeper",
-        "value": 3
+        "value": 4
       },
       { 
         "text": "Maybe - I'm curious to learn more", 
@@ -133,7 +152,45 @@ const questions = [
   }
 ];
 
-// NOUVEAUX MESSAGES DE PROGRESSION BASÉS SUR DÉCOUVERTE
+// Score brut : min = 5 (1×5), max = 50 (10×5)
+const MAX_RAW_SCORE = 50;
+const MIN_RAW_SCORE = 5;
+const SCORE_CAP = 91; // Plafond absolu
+
+/**
+ * Convertit le score brut en pourcentage affiché.
+ * 1. Normalise entre 0 et 1
+ * 2. Applique une courbe dégressive (exposant 1.4) → les scores moyens sont écrasés
+ * 3. Plafonne à 91%
+ */
+const calculateScorePercentage = (rawScore) => {
+  const normalized = Math.max(0, (rawScore - MIN_RAW_SCORE) / (MAX_RAW_SCORE - MIN_RAW_SCORE));
+  const curved = Math.pow(normalized, 1.4);
+  return Math.min(Math.round(curved * 100), SCORE_CAP);
+};
+
+/**
+ * Score en temps réel (partiel) — même courbe, même cap
+ * Basé uniquement sur les questions répondues jusqu'ici
+ */
+const calculatePartialScorePercentage = (rawScore, questionsAnswered) => {
+  if (questionsAnswered === 0) return 0;
+  const partialMax = questionsAnswered * 10;
+  const partialMin = questionsAnswered * 1;
+  const normalized = Math.max(0, (rawScore - partialMin) / (partialMax - partialMin));
+  const curved = Math.pow(normalized, 1.4);
+  return Math.min(Math.round(curved * 100), SCORE_CAP);
+};
+
+// Tier system pour les messages d'encouragement
+const getAnswerTier = (value) => {
+  if (value >= 10) return 'excellent';
+  if (value >= 4) return 'moderate';
+  if (value >= 2) return 'concerning';
+  return 'critical';
+};
+
+// MESSAGES DE PROGRESSION
 const PROGRESS_MESSAGES = [
   { threshold: 0, message: "🔍 Analyzing your morning energy patterns..." },
   { threshold: 20, message: "🧠 Mapping your spirit-body connection..." },
@@ -143,31 +200,32 @@ const PROGRESS_MESSAGES = [
   { threshold: 95, message: "🎯 Calculating your personalized reversal protocol..." }
 ];
 
-// NOUVEAUX MESSAGES PERSONNALISÉS PAR VALEUR DE RÉPONSE
+// MESSAGES PERSONNALISÉS PAR TIER
 const getEncouragementMessage = (value, questionIndex) => {
+  const tier = getAnswerTier(value);
   const messages = {
-    4: [
+    excellent: [
       "💪 Excellent! Your strong vitality foundation gives you an advantage",
       "🌟 Impressive! Your spiritual alignment is above average",
       "✨ Wonderful! You're maintaining youthful energy patterns",
       "🔥 Great! Your pineal health shows positive signs",
       "⚡ Outstanding! You have strong spiritual-biological connection"
     ],
-    3: [
+    moderate: [
       "👍 Good awareness! You're noticing the subtle shifts",
       "🎯 Honest insight! This is a common pattern we can optimize",
       "💡 Smart observation! You're on the path to understanding",
       "🌿 Valuable awareness! This reveals key optimization areas",
       "📊 Clear pattern emerging! Your honesty accelerates healing"
     ],
-    2: [
+    concerning: [
       "🔍 Important revelation! You've identified a key blockage",
       "⚠️ Critical awareness! This pattern affects 47% of seekers",
       "💫 Brave honesty! Acknowledging this is the first step to reversal",
       "🔓 Key insight! You've pinpointed a major energy disruption",
       "🎯 Crucial data! This explains many of your symptoms"
     ],
-    1: [
+    critical: [
       "🚨 Breakthrough insight! This severe pattern is HIGHLY reversible",
       "💥 Major discovery! You've identified critical calcification signs",
       "🔴 Urgent pattern detected! Good news: solutions exist",
@@ -176,10 +234,10 @@ const getEncouragementMessage = (value, questionIndex) => {
     ]
   };
   
-  return messages[value]?.[questionIndex] || messages[value]?.[0] || "Great insight!";
+  return messages[tier]?.[questionIndex] || messages[tier]?.[0] || "Great insight!";
 };
 
-// NOUVEAUX MICRO-INSIGHTS ÉDUCATIFS SUR LA PINÉALE
+// MICRO-INSIGHTS ÉDUCATIFS SUR LA PINÉALE
 const QUESTION_INSIGHTS = [
   {
     question: 0,
@@ -216,15 +274,14 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
   const [showEncouragement, setShowEncouragement] = useState(false);
   const [currentEncouragementMsg, setCurrentEncouragementMsg] = useState('');
   const [recentCompletions, setRecentCompletions] = useState(12847);
-  const [timeLeft, setTimeLeft] = useState(null); // Synchronisé avec Hero
+  const [timeLeft, setTimeLeft] = useState(null);
   const [quizStartTime] = useState(Date.now());
   const analytics = getAnalytics();
 
-  // Constantes de synchronisation avec Hero
   const TIMER_STORAGE_KEY = 'pineal_timer_data';
   const SPOTS_STORAGE_KEY = 'pineal_spots_left';
 
-  // NOUVEAU : Synchroniser avec le timer de la Hero
+  // Synchroniser avec le timer de la Hero
   useEffect(() => {
     const updateTimerFromStorage = () => {
       if (typeof window === 'undefined') return;
@@ -240,15 +297,12 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           setTimeLeft(0);
         }
       } else {
-        // Si pas de timer dans le localStorage, utiliser une valeur par défaut
         setTimeLeft(15 * 60);
       }
     };
 
-    // Mettre à jour immédiatement
     updateTimerFromStorage();
 
-    // S'abonner aux changements de localStorage
     const handleStorageChange = (e) => {
       if (e.key === TIMER_STORAGE_KEY) {
         updateTimerFromStorage();
@@ -256,8 +310,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
     };
 
     window.addEventListener('storage', handleStorageChange);
-
-    // Timer pour mettre à jour toutes les secondes
     const timer = setInterval(updateTimerFromStorage, 1000);
 
     return () => {
@@ -274,15 +326,15 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // NOUVEAU : Social proof dynamique
+  // Social proof dynamique
   useEffect(() => {
     const interval = setInterval(() => {
       setRecentCompletions(prev => prev + Math.floor(Math.random() * 3));
-    }, 45000); // Augmente toutes les 45 secondes
+    }, 45000);
     return () => clearInterval(interval);
   }, []);
 
-  // NOUVEAU : Auto-skip intro si venant du Hero
+  // Auto-skip intro si venant du Hero
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const skipIntro = localStorage.getItem('skipQuizIntro');
@@ -311,7 +363,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
     };
     setAnswers(newAnswers);
     
-    // Tracker l'événement de réponse
     analytics.track(EVENTS.QUIZ_QUESTION_ANSWERED, {
       questionIndex: questionIndex,
       selectedAnswer: option.text,
@@ -319,21 +370,21 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
       timeSpentOnQuestion: Date.now() - quizStartTime
     });
     
-    // Calculer le nouveau score
-    const newScore = Object.keys(newAnswers).reduce((sum, key) => {
+    // Calculer le nouveau score brut
+    const newRawScore = Object.keys(newAnswers).reduce((sum, key) => {
       const qIndex = parseInt(key);
       const selectedOption = questions[qIndex].options.find(opt => opt.text === newAnswers[key]);
       return sum + (selectedOption?.value || 0);
     }, 0);
-    setTotalScore(newScore);
+    setTotalScore(newRawScore);
     
-    // NOUVEAU : Message d'encouragement personnalisé
+    // Message d'encouragement personnalisé par tier
     const encouragementMsg = getEncouragementMessage(option.value, questionIndex);
     setCurrentEncouragementMsg(encouragementMsg);
     setShowEncouragement(true);
     setTimeout(() => setShowEncouragement(false), 2000);
     
-    // OPTIMISÉ : Auto-avancement instantané (0ms au lieu de 300ms)
+    // Auto-avancement
     setTimeout(() => {
       if (questionIndex < questions.length - 1) {
         handleNext();
@@ -348,22 +399,26 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
       // Dernière question → Résultats
       if (typeof window !== 'undefined') {
         const quizDuration = Date.now() - quizStartTime;
-        const scorePercentage = Math.round((totalScore / (questions.length * 4)) * 100);
+        // Score avec courbe dégressive + cap 91%
+        const scorePercentage = calculateScorePercentage(totalScore);
         
-        // Déterminer le pattern
+        // Patterns ajustés pour la nouvelle distribution
+        // La majorité des utilisateurs tomberont entre 15-55%
         let userPattern = 'Unknown';
-        if (scorePercentage <= 40) {
-          userPattern = 'The Disconnected Seeker';
-        } else if (scorePercentage <= 70) {
-          userPattern = 'The Fluctuating Spirit';
+        if (scorePercentage <= 25) {
+          userPattern = 'The Disconnected Seeker';      // Score très bas → besoin urgent
+        } else if (scorePercentage <= 50) {
+          userPattern = 'The Fluctuating Spirit';        // Score moyen → besoin clair
+        } else if (scorePercentage <= 75) {
+          userPattern = 'The Awakening Guardian';        // Score bon → optimisation
         } else {
-          userPattern = 'The Awakening Guardian';
+          userPattern = 'The Aligned Luminary';          // Score excellent → maintenance (rare)
         }
         
-        // Tracker le quiz complété et sauvegarder les infos
         analytics.setUserInfo(scorePercentage, userPattern);
         analytics.track(EVENTS.QUIZ_COMPLETED, {
           totalScore: totalScore,
+          rawScoreMax: MAX_RAW_SCORE,
           scorePercentage: scorePercentage,
           userPattern: userPattern,
           quizDuration: quizDuration,
@@ -371,13 +426,13 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           timerRemaining: timeLeft
         });
         
-        // Sauvegarder aussi en localStorage pour les patterns
         localStorage.setItem('analytics_user_pattern', userPattern);
         localStorage.setItem('analytics_score_percentage', scorePercentage.toString());
         
         const results = {
           answers,
           totalScore,
+          rawScoreMax: MAX_RAW_SCORE,
           scorePercentage,
           userPattern,
           completedAt: new Date().toISOString(),
@@ -423,12 +478,12 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
     .filter(msg => progress >= msg.threshold)
     .sort((a, b) => b.threshold - a.threshold)[0]?.message || PROGRESS_MESSAGES[0].message;
 
-  // Calculer le score actuel en pourcentage
-  const currentScorePercentage = currentStep >= 0 && Object.keys(answers).length > 0
-    ? Math.round((totalScore / ((currentStep + 1) * 4)) * 100)
+  // Score temps réel avec la même courbe dégressive + cap
+  const questionsAnsweredCount = Object.keys(answers).length;
+  const currentScorePercentage = questionsAnsweredCount > 0
+    ? calculatePartialScorePercentage(totalScore, questionsAnsweredCount)
     : 0;
 
-  // Récupérer les spots restants depuis localStorage
   const getSpotsLeft = () => {
     if (typeof window === 'undefined') return 47;
     const savedSpots = localStorage.getItem(SPOTS_STORAGE_KEY);
@@ -437,7 +492,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
 
   const spotsLeft = getSpotsLeft();
 
-  // Page d'intro du quiz (gardée pour accès direct, mais skippée depuis Hero)
+  // Page d'intro du quiz
   if (!hasStarted) {
     return (
       <motion.section
@@ -448,7 +503,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
         className="w-full max-w-7xl mx-auto px-6 sm:px-8 md:px-12 lg:px-16 py-10 md:py-16"
       >
         <div className="bg-gradient-to-br from-white to-amber-50/30 rounded-2xl p-8 md:p-12 shadow-xl border border-amber-200 text-center">
-          {/* TIMER SYNCHRONISÉ avec Hero */}
           {timeLeft !== null && timeLeft > 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -539,7 +593,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
       transition={{ duration: 0.6 }}
       className="w-full max-w-7xl mx-auto px-6 sm:px-8 md:px-12 lg:px-16 py-10 md:py-16"
     >
-      {/* TIMER SYNCHRONISÉ SUR TOUTES LES PAGES */}
       {timeLeft !== null && timeLeft > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -574,7 +627,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
         </motion.div>
       )}
 
-      {/* PROGRESS BADGE OPTIMISÉ */}
+      {/* PROGRESS BADGE */}
       <div className="mb-8 p-5 bg-gradient-to-r from-white via-purple-50/50 to-white rounded-2xl border-2 border-purple-200/50 shadow-lg">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-4">
           <div className="flex-1">
@@ -587,7 +640,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Score Preview en Temps Réel */}
             {currentScorePercentage > 0 && (
               <div className="flex items-center gap-2 bg-gradient-to-r from-purple-100 to-indigo-100 px-3 py-1.5 rounded-full border border-purple-300">
                 <Brain className="w-4 h-4 text-purple-600" />
@@ -606,7 +658,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           </div>
         </div>
 
-        {/* PROGRESS BAR */}
         <div className="relative">
           <div className="w-full h-4 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full overflow-hidden shadow-inner">
             <motion.div
@@ -624,7 +675,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           </div>
         </div>
 
-        {/* ENCOURAGEMENT MESSAGE PERSONNALISÉ */}
         <AnimatePresence>
           {showEncouragement && (
             <motion.div
@@ -655,7 +705,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.4 }}
           >
-            {/* QUESTION HEADER */}
             <div className="mb-8">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
@@ -670,7 +719,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
                 {currentQuestion.question}
               </h2>
 
-              {/* MICRO-INSIGHT ÉDUCATIF SUR LA PINÉALE */}
               {currentInsight && (
                 <motion.div
                   initial={{ opacity: 0, y: -5 }}
@@ -693,7 +741,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
               )}
             </div>
 
-            {/* ANSWER OPTIONS */}
             <div className="space-y-3 mb-8">
               {currentQuestion.options.map((option, idx) => {
                 const isSelected = answers[currentStep] === option.text;
@@ -742,9 +789,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           </motion.div>
         </AnimatePresence>
 
-        {/* NAVIGATION BUTTONS OPTIMISÉS */}
         <div className="flex flex-col sm:flex-row gap-3 mt-10 pt-6 border-t border-purple-200/50">
-          {/* Bouton Previous */}
           <motion.button
             onClick={handlePrevious}
             whileHover={{ scale: 1.02 }}
@@ -755,7 +800,6 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
             ← Previous
           </motion.button>
           
-          {/* CTA PRINCIPAL avec timer intégré */}
           <motion.button
             onClick={handleNext}
             whileHover={{ 
@@ -809,7 +853,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
         </div>
       </div>
 
-      {/* SOCIAL PROOF DYNAMIQUE OPTIMISÉ */}
+      {/* SOCIAL PROOF */}
       <div className="text-center p-4 bg-gradient-to-r from-white to-purple-50/30 rounded-xl border border-purple-200">
         <p className="text-sm text-gray-700 flex items-center justify-center gap-2">
           <span className="font-semibold text-purple-700">{recentCompletions.toLocaleString()} people</span> 
@@ -821,7 +865,7 @@ export default function QuizStepper({ autoStart = false, onBackClick = null }) {
           ></motion.span>
         </p>
         <p className="text-xs text-gray-500 mt-1">
-          94% report discovering patterns they didn't know existed • {spotsLeft} personalized spots remaining
+          94% report discovering patterns they didn&apos;t know existed • {spotsLeft} personalized spots remaining
         </p>
       </div>
     </motion.section>

@@ -18,5 +18,95 @@
     "submittedAt": "2026-02-09T08:33:23.410Z",
     "emailSent": true,
     "source": "exit_popup"
+  },
+  {
+    "id": 1770723861587,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 7,
+    "context": "completed",
+    "submittedAt": "2026-02-10T11:44:21.587Z",
+    "emailSent": false,
+    "source": "exit_popup"
+  },
+  {
+    "id": 1770724004594,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 7,
+    "context": "completed",
+    "submittedAt": "2026-02-10T11:46:44.594Z",
+    "emailSent": false,
+    "source": "exit_popup"
+  },
+  {
+    "id": 1770724425618,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 7,
+    "context": "completed",
+    "submittedAt": "2026-02-10T11:53:45.618Z",
+    "emailSent": true,
+    "source": "exit_popup",
+    "messageId": "<d8f1b1dc-4eb5-5af1-58da-8b21604addc1@mind-body.fit>",
+    "sentAt": "2026-02-10T11:53:52.066Z"
+  },
+  {
+    "id": 1770724674439,
+    "email": "thepebible2019@gmail.com",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 7,
+    "context": "completed",
+    "submittedAt": "2026-02-10T11:57:54.439Z",
+    "emailSent": true,
+    "source": "exit_popup",
+    "messageId": "<a74c69ea-7e6f-5ac3-5c56-b0121174c897@mind-body.fit>",
+    "sentAt": "2026-02-10T11:58:00.991Z"
+  },
+  {
+    "id": 1770765724938,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Awakening Guardian",
+    "vitalityScore": 15,
+    "context": "completed",
+    "submittedAt": "2026-02-10T23:22:04.939Z",
+    "emailSent": true,
+    "source": "exit_popup",
+    "messageId": "<e007f76e-4fbb-9415-161a-ba6dbaf08ce5@mind-body.fit>",
+    "sentAt": "2026-02-10T23:22:10.968Z"
+  },
+  {
+    "id": 1770765847642,
+    "email": "contact@mind-body.fit",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 8,
+    "context": "completed",
+    "submittedAt": "2026-02-10T23:24:07.642Z",
+    "emailSent": true,
+    "source": "exit_popup",
+    "messageId": "<e3ec45ae-a78b-5d00-988a-45a7986ae29f@mind-body.fit>",
+    "sentAt": "2026-02-10T23:24:11.395Z"
+  },
+  {
+    "id": 1770771018568,
+    "email": "ugbongboui@gmail.com",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 6,
+    "context": "completed",
+    "submittedAt": "2026-02-11T00:50:18.568Z",
+    "emailSent": true,
+    "source": "exit_popup",
+    "sentAt": "2026-02-11T00:50:20.900Z"
+  },
+  {
+    "id": 1770771359765,
+    "email": "check-auth@verifier.port25.com",
+    "userPattern": "The Disconnected Seeker",
+    "vitalityScore": 6,
+    "context": "completed",
+    "submittedAt": "2026-02-11T00:55:59.765Z",
+    "emailSent": true,
+    "source": "exit_popup",
+    "sentAt": "2026-02-11T00:56:00.754Z"
   }
 ]

@@ -11,39 +11,45 @@ export default function ResultsPage() {
   useEffect(() => {
     setMounted(true);
 
-    // ═════════════════════════════════════════════════════════
-    // 📱 X (Twitter) PIXEL TRACKING - VERSION JAVASCRIPT
-    // ═════════════════════════════════════════════════════════
-    
-    const trackPageView = () => {
-      if (typeof window !== 'undefined' && window.twq) {
+    // Google Analytics custom event
+    if (typeof window !== 'undefined' && window.gtag) {
+      window.gtag('event', 'results_view', {
+        vitalityScore: 50,
+        userPattern: 'The Fluctuating Spirit',
+        timestamp: new Date().toISOString(),
+        timerRemaining: 6255
+      });
+      console.log('Analytics Event: results_view', {
+        vitalityScore: 50,
+        userPattern: 'The Fluctuating Spirit',
+        timestamp: new Date().toISOString(),
+        timerRemaining: 6255
+      });
+    }
+
+    // Attente active que le pixel soit prêt
+    function waitForTwqAndTrack(attempt = 0) {
+      if (typeof window !== 'undefined' && window.twq && window.twq.version) {
         try {
-          // Track PageView standard
           window.twq('track', 'PageView');
           console.log('✅ X PageView tracked on Results page');
-          
-          // Track custom event (optionnel - si configuré dans X Ads)
-           //Décommenter seulement si tw-r1bmm-r4i67 existe dans votre Events Manager
-          
+          // Event custom : Purchase (value et currency uniquement)
           window.twq('event', 'tw-r1bmm-r4i67', {
-            content_name: 'Quiz Results',
-            content_type: 'page_view'
+            value: 5.00,
+            currency: 'USD'
           });
           console.log('✅ X custom event tracked: tw-r1bmm-r4i67');
-          
-          
         } catch (error) {
           console.error('❌ X tracking error:', error);
         }
+      } else if (attempt < 10) {
+        setTimeout(() => waitForTwqAndTrack(attempt + 1), 500);
       } else {
-        console.warn('⚠️ X Pixel not loaded - check layout.jsx installation');
+        console.warn('⚠️ X Pixel not loaded after 5s - check layout.js and CSP');
       }
-    };
+    }
 
-    // Délai pour assurer que pixel est chargé
-    const timer = setTimeout(trackPageView, 1000);
-    
-    return () => clearTimeout(timer);
+    waitForTwqAndTrack();
   }, []);
 
   if (!mounted) {
