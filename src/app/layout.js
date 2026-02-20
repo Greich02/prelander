@@ -33,7 +33,42 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* X Pixel Base Code */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* REDDIT PIXEL - BASE CODE */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        <Script
+          id="reddit-pixel-base"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              !function(w,d){
+                if(!w.rdt){
+                  var p=w.rdt=function(){
+                    p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)
+                  };
+                  p.callQueue=[];
+                  var t=d.createElement("script");
+                  t.src="https://www.redditstatic.com/ads/pixel.js";
+                  t.async=!0;
+                  var s=d.getElementsByTagName("script")[0];
+                  s.parentNode.insertBefore(t,s)
+                }
+              }(window,document);
+              
+              // Initialize Reddit Pixel with your ID
+              rdt('init','a2_ii7jiw9uywto', {"optOut":false,"useDecimalCurrencyValues":true});
+              
+              // Track PageVisit on all pages
+              rdt('track', 'PageVisit');
+              
+              console.log('✅ Reddit Pixel initialized: a2_ii7jiw9uywto');
+            `,
+          }}
+        />
+
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* X PIXEL - BASE CODE */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <Script
           id="twitter-pixel-base"
           strategy="afterInteractive"
@@ -50,22 +85,23 @@ export default function RootLayout({ children }) {
                 a.parentNode.insertBefore(u,a))
               }(window,document,'script');
               
-              // REMPLACER PAR VOTRE VRAI PIXEL ID
               twq('config','r1bmm');
             `,
           }}
         />
       </head>
+      
       <body
         className={`${inter.variable} ${playfair.variable} ${cormorant.variable} antialiased`}
       >
-        {/* 1. Chargement de la bibliothèque Google Tag Manager */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* GOOGLE ANALYTICS */}
+        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-WLXVWP8KZM"
           strategy="afterInteractive"
         />
-
-        {/* 2. Initialisation de Google Analytics (Inline Script) */}
+        
         <Script id="google-analytics" strategy="afterInteractive">
           {`
             window.dataLayer = window.dataLayer || [];

@@ -122,25 +122,20 @@ export default function Results({ isVisible, onCTAClick }) {
   // ============================================================
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      console.log('🔍 === DÉBUT CHARGEMENT SCORE RESULTS ===');
+      //console.log('🔍 === DÉBUT CHARGEMENT SCORE RESULTS ===');
       
       const results = JSON.parse(localStorage.getItem('quizResults') || '{}');
-      console.log('📦 quizResults brut:', results);
+      //console.log('📦 quizResults brut:', results);
       
       // ✅ PRIORITÉ ABSOLUE : Score de QuizStepper
       if (results.scorePercentage !== undefined && results.scorePercentage !== null) {
         setVitalityScore(results.scorePercentage);
         setUserPattern(results.userPattern || 'Unknown');
-        
-        console.log('✅ ===== SCORE CHARGÉ DEPUIS QUIZSTEPPER =====');
-        console.log('✅ Score affiché:', results.scorePercentage + '%');
-        console.log('✅ Pattern:', results.userPattern);
-        console.log('✅ Score brut:', results.totalScore, '/', MAX_RAW_SCORE);
-        console.log('✅ ============================================');
+
       } 
       // ⚠️ FALLBACK : Recalcul si QuizStepper n'a pas sauvegardé
       else {
-        console.warn('⚠️ PAS DE SCORE DANS QUIZSTEPPER - RECALCUL FALLBACK');
+        //console.warn('⚠️ PAS DE SCORE DANS QUIZSTEPPER - RECALCUL FALLBACK');
         
         const answers = results.answers || {};
         let totalRawScore = 0;
@@ -160,8 +155,6 @@ export default function Results({ isVisible, onCTAClick }) {
           }
         });
         
-        console.log('📊 Total brut:', totalRawScore, '/', MAX_RAW_SCORE);
-        console.log('📊 Questions répondues:', questionsAnswered, '/5');
         
         // Appliquer la courbe v4
         const scorePercentage = calculateScorePercentage(totalRawScore);
@@ -180,11 +173,7 @@ export default function Results({ isVisible, onCTAClick }) {
         }
         setUserPattern(pattern);
         
-        console.log('⚠️ ===== SCORE RECALCULÉ (FALLBACK) =====');
-        console.log('⚠️ Score affiché:', scorePercentage + '%');
-        console.log('⚠️ Pattern:', pattern);
-        console.log('⚠️ Score brut:', totalRawScore, '/', MAX_RAW_SCORE);
-        console.log('⚠️ ======================================');
+
       }
       
       // Générer insights

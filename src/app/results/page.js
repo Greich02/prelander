@@ -11,7 +11,9 @@ export default function ResultsPage() {
   useEffect(() => {
     setMounted(true);
 
-    // Google Analytics custom event
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // GOOGLE ANALYTICS - RESULTS VIEW EVENT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('event', 'results_view', {
         vitalityScore: 50,
@@ -19,33 +21,55 @@ export default function ResultsPage() {
         timestamp: new Date().toISOString(),
         timerRemaining: 6255
       });
-      console.log('Analytics Event: results_view', {
-        vitalityScore: 50,
-        userPattern: 'The Fluctuating Spirit',
-        timestamp: new Date().toISOString(),
-        timerRemaining: 6255
-      });
     }
 
-    // Attente active que le pixel soit prêt
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // REDDIT PIXEL - PAGEVISIT (RESULTS PAGE)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    function waitForRedditAndTrack(attempt = 0) {
+      if (typeof window !== 'undefined' && window.rdt) {
+        try {
+          // Track ViewContent event (user viewed results)
+          window.rdt('track', 'ViewContent', {
+            content_type: 'results_page',
+            content_name: 'Quiz Results',
+            value: 79.00,
+            currency: 'USD'
+          });
+          console.log('✅ Reddit ViewContent tracked on Results page');
+        } catch (error) {
+          console.error('❌ Reddit tracking error:', error);
+        }
+      } else if (attempt < 10) {
+        // Retry up to 10 times (5 seconds total)
+        setTimeout(() => waitForRedditAndTrack(attempt + 1), 500);
+      } else {
+        console.warn('⚠️ Reddit Pixel not loaded after 5s - check layout.jsx');
+      }
+    }
+
+    waitForRedditAndTrack();
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // X PIXEL - PAGEVIEW + CUSTOM EVENT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     function waitForTwqAndTrack(attempt = 0) {
       if (typeof window !== 'undefined' && window.twq && window.twq.version) {
         try {
           window.twq('track', 'PageView');
-          console.log('✅ X PageView tracked on Results page');
-          // Event custom : Purchase (value et currency uniquement)
+          
+          // Custom event with value
           window.twq('event', 'tw-r1bmm-r4i67', {
             value: 5.00,
             currency: 'USD'
           });
-          console.log('✅ X custom event tracked: tw-r1bmm-r4i67');
         } catch (error) {
           console.error('❌ X tracking error:', error);
         }
       } else if (attempt < 10) {
         setTimeout(() => waitForTwqAndTrack(attempt + 1), 500);
       } else {
-        console.warn('⚠️ X Pixel not loaded after 5s - check layout.js and CSP');
+        console.warn('⚠️ X Pixel not loaded after 5s - check layout.jsx');
       }
     }
 
