@@ -1,7 +1,6 @@
 import { Playfair_Display, Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 
-// Configuration des polices
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
@@ -19,7 +18,6 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
-// Métadonnées de la page
 export const metadata = {
   title: "Vitality Assessment",
   description: "A quick assessment exploring your daily energy, mindset, and internal alignment",
@@ -32,20 +30,19 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {/* REDDIT PIXEL - VERSION INLINE GARANTIE */}
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* REDDIT PIXEL */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              !function(w,d){if(!w.rdt){var p=w.rdt=function(){p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)};p.callQueue=[];var t=d.createElement("script");t.src="https://www.redditstatic.com/ads/pixel.js",t.async=!0;var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(t,s)}}(window,document);rdt('init','a2_ii7jiw9uywto');rdt('track', 'PageVisit');console.log('✅ Reddit Pixel loaded');
+              !function(w,d){if(!w.rdt){var p=w.rdt=function(){p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)};p.callQueue=[];var t=d.createElement("script");t.src="https://www.redditstatic.com/ads/pixel.js",t.async=!0;var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(t,s)}}(window,document);
+              rdt('init','a2_ii7jiw9uywto', {"optOut":false,"useDecimalCurrencyValues":true});
+              rdt('track', 'PageVisit');
+              console.log('✅ Reddit Pixel: Init called, PageVisit tracked');
             `,
           }}
         />
 
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         {/* X PIXEL */}
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -54,9 +51,7 @@ export default function RootLayout({ children }) {
           }}
         />
 
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         {/* GOOGLE ANALYTICS */}
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <script
           async
           src="https://www.googletagmanager.com/gtag/js?id=G-WLXVWP8KZM"
