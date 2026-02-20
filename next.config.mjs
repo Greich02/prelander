@@ -5,11 +5,12 @@ const nextConfig = {
   async headers() {
     const cspHeader = `
       default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline' https://static.ads-twitter.com https://ads-twitter.com https://ads-api.twitter.com https://analytics.twitter.com https://www.googletagmanager.com https://www.google-analytics.com;
+      script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.redditstatic.com https://static.ads-twitter.com https://ads-twitter.com https://ads-api.twitter.com https://analytics.twitter.com https://www.googletagmanager.com https://www.google-analytics.com;
+      script-src-elem 'self' 'unsafe-inline' https://www.redditstatic.com https://static.ads-twitter.com https://ads-twitter.com https://www.googletagmanager.com;
       style-src 'self' 'unsafe-inline';
-      img-src 'self' blob: data: https://static.ads-twitter.com https://ads-twitter.com https://ads-api.twitter.com https://analytics.twitter.com https://t.co https://www.google-analytics.com https://www.googletagmanager.com;
+      img-src 'self' blob: data: https://www.redditstatic.com https://static.ads-twitter.com https://ads-twitter.com https://ads-api.twitter.com https://analytics.twitter.com https://t.co https://www.google-analytics.com https://www.googletagmanager.com;
       font-src 'self';
-      connect-src 'self' https://static.ads-twitter.com https://ads-twitter.com https://ads-api.twitter.com https://analytics.twitter.com https://www.google-analytics.com https://www.googletagmanager.com;
+      connect-src 'self' https://events.redditmedia.com https://www.redditstatic.com https://static.ads-twitter.com https://ads-twitter.com https://ads-api.twitter.com https://analytics.twitter.com https://www.google-analytics.com https://www.googletagmanager.com;
       object-src 'none';
       base-uri 'self';
       form-action 'self';
